@@ -7,13 +7,14 @@ import rclpy
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Path
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 
 
 class PathPublisher(Node):
     def __init__(self):
         super().__init__("scenario_path")
-        values = self.declare_parameter("waypoints", []).value
+        values = self.declare_parameter("waypoints", Parameter.Type.DOUBLE_ARRAY).value
         self.frame_id = self.declare_parameter("frame_id", "scan_demo_map").value
         if len(values) < 6 or len(values) % 3 or not all(math.isfinite(float(v)) for v in values):
             raise ValueError("waypoints must contain at least two finite XYZ triples")
@@ -36,17 +37,23 @@ class PathPublisher(Node):
             pose.pose.position.x, pose.pose.position.y, pose.pose.position.z = self.values[i:i + 3]
             path.poses.append(pose)
         self.publisher.publish(path)
-        self.get_logger().info("Published %d configured XYZ poses", len(path.poses))
+        self.get_logger().info(f"Published {len(path.poses)} configured XYZ poses")
         self.timer.cancel()
 
 
 def main():
     rclpy.init()
+    node = None
     try:
         node = PathPublisher()
         rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
     finally:
-        rclpy.shutdown()
+        if node is not None:
+            node.destroy_node()
+        if rclpy.ok():
+            rclpy.shutdown()
 
 
 if __name__ == "__main__":

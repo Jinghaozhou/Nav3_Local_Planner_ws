@@ -37,6 +37,8 @@ class TestPcdToSdf(unittest.TestCase):
             converter.write_manifest(world, pcd, mesh, bounds, 0.1, len(cells))
             data = mesh.read_text()
             self.assertEqual(data.count("\nf "), 12)
+            self.assertEqual(data.count("\nv "), data.count("\nvn "))
+            self.assertIn("f 1//1 2//2 3//3 4//4", data)
             self.assertIn("v 1.000000 2.000000 0.000000", data)
             tree = ET.parse(world)
             self.assertEqual(tree.findtext(".//model/static"), "true")

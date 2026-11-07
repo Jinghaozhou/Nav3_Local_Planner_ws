@@ -119,7 +119,10 @@ def write_obj(path, cells, lower, resolution):
                     corner = _CORNERS[corner_index]
                     xyz = lower + resolution * (np.asarray(cell) + corner)
                     stream.write(f"v {xyz[0]:.6f} {xyz[1]:.6f} {xyz[2]:.6f}\n")
-                stream.write(f"f {vertex + 1} {vertex + 2} {vertex + 3} {vertex + 4}\n")
+                for _ in corners:
+                    stream.write(f"vn {neighbor[0]} {neighbor[1]} {neighbor[2]}\n")
+                stream.write("f " + " ".join(
+                    f"{vertex + offset}//{vertex + offset}" for offset in range(1, 5)) + "\n")
                 vertex += 4
 
 

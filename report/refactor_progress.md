@@ -88,7 +88,13 @@ colcon test-result --test-result-base build/merged --verbose
 
 启动时还把转换元数据中的区域边界传给局部地图节点，使 SCAN 接收的点只来自 Gazebo 静态碰撞场景对应的 PCD 区域；对应 ROS 裁剪测试已通过。
 
-**未验收：**本机尚未安装 Gazebo Fortress、`ros_gz`、`gz_ros2_control`、`xacro`，因此未运行物理仿真、Xacro 展开、Go2 站立/行走/爬楼及完整 SCAN 闭环。`apt-get -s install` 显示当前系统的 `krb5-multidev` 与候选 `libkrb5-3`/`libk5crypto3` 版本冲突，未对系统包执行安装或升级。现有测试步态只是足端轨迹和逆运动学适配，不能据此声称稳定行走；PCD 体素碰撞网格也需要逐图检查地面连续性、孔洞和与原始点云的偏差。ROS 集成测试需要把 `ROS_LOG_DIR` 指向工作空间可写目录，避免沙箱中的 `~/.ros/log` 只读错误。
+后续已启用 Ubuntu `jammy-updates` 软件源并安装 Gazebo Fortress 6.18.0、`ros_gz`、`gz_ros2_control`、`ros2_controllers`、`xacro`。Go2 Xacro 展开、SDF 校验、控制器加载及无界面物理运行均已执行。最初生成的 OBJ 没有法线，DART 加载碰撞网格时崩溃；转换器已补充逐顶点法线，修复后 Gazebo 服务端连续运行至预设超时。ROS 集成测试需要把 `ROS_LOG_DIR` 指向工作空间可写目录，避免沙箱中的 `~/.ros/log` 只读错误。
+
+`building2_9.pcd` 原点示例区域缺失可靠地面，Go2 从出生位置跌出碰撞场景，SCAN 因输入失效停止运动。改用现有 `map.pcd` 的平坦区域后，22 秒无界面测试收到 914 条三维里程计、73 条局部点云，SCAN 状态多数为 `RUNNING`、发布非空三维局部路径和非零 `cmd_vel`；机身高度维持在约 0.388–0.430 m。但目标在 x=2 m，SCAN 输出正向 x 速度时 Go2 约 20 秒出现约 5 cm 反向漂移，不能算到达目标或验证稳定行走。`path_publisher.py` 的 Humble 参数类型、日志调用和退出处理也已在实际启动中修正。
+
+隔离步态测试使用同一 PCD 场景、不启动 SCAN：持续给出 `linear.x=0.15 m/s`，Go2 约 18 秒从 x=-0.01 m 前进到 x=0.62 m，机身高度维持约 0.39–0.43 m；给出 `angular.z=0.3 rad/s` 时，航向约 14 秒从 0.02 rad 增至 1.15 rad。前后和旋转符号均正确。闭环诊断中，控制器大部分时间报告 `Turning before translation`：机器人轻微后漂后，重规划轨迹开头指向后方，即使终点仍在 x=2 m。把演示重规划间隔延长或改读 Gazebo `twist` 都未解决，故未把试验性的间隔调整保留。Gazebo 演示现在可显式配置速度来源，默认读取仿真里程计 `twist`。
+
+**未验收：**SCAN 闭环下的速度跟踪和目标到达、障碍避让、坡道和楼梯。PCD 体素碰撞网格需要逐图检查地面连续性、孔洞及与原始点云的偏差。还需针对重规划轨迹反向初速与控制器转向门槛设计协调策略，并用物理仿真验证后才能称为自主导航示例。
 
 ## 当前运行边界
 
@@ -96,6 +102,6 @@ colcon test-result --test-result-base build/merged --verbose
 2. 本轮未接真实 Fast-LIO、KISS、PCT 进程或 rosbag，接口模拟通过也不能等同于系统或实机导航验收。
 3. 默认碰撞模型是随航向变化的双圆柱，仍需以实际机器人尺寸验证窄通道与原地转向的扫掠空间。
 4. KISS 的标准定位许可适配器、Navigation Manager 和统一 Map Server 不在本轮范围。其最终滑动窗口输入调整不改变 SCAN 的基本 TF 接口。
-5. 旧 OpenGL、程序地图生成和平面运动学后端已归档至 `legacy`；新 Gazebo 后端仍缺运行依赖和物理验收。
+5. 旧 OpenGL、程序地图生成和平面运动学后端已归档至 `legacy`；新 Gazebo 后端已通过短时平地启动与话题联通验证，步态控制和复杂地形仍需物理验收。
 
 当前启动和参数说明见 [RUNNING.md](../RUNNING.md)、[集成说明](../src/scan_planner/docs/integration.md) 和 [接口协议](../src/scan_planner/docs/interfaces.md)。

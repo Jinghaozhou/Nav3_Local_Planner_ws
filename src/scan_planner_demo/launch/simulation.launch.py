@@ -8,6 +8,7 @@ from pathlib import Path
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, RegisterEventHandler, SetEnvironmentVariable
+from launch.conditions import IfCondition
 from launch.event_handlers import OnProcessExit
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, EnvironmentVariable, LaunchConfiguration
@@ -45,18 +46,20 @@ def _setup(context):
 
     model = share / "description" / "xacro" / "robot.xacro"
     robot_description = Command(["xacro ", str(model), " use_gazebo:=true"])
+    gz_args = f"{'-s ' if value('headless').lower() == 'true' else ''}-r -v 3 {world}"
     gazebo = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(gz_share / "launch" / "gz_sim.launch.py")),
-        launch_arguments={"gz_args": f"-r -v 3 {world}", "on_exit_shutdown": "true"}.items())
+        launch_arguments={"gz_args": gz_args, "on_exit_shutdown": "true"}.items())
     scan = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(str(planner_share / "launch" / "scan_planner.launch.py")),
+        condition=IfCondition(LaunchConfiguration("start_scan")),
         launch_arguments={
             "namespace": "scan_demo", "use_sim_time": "true",
             "odom_topic": "/scan_demo/odom", "local_map_topic": "/scan_demo/local_map",
             "path_topic": "/scan_demo/global_path", "cmd_vel_topic": "/scan_demo/cmd_vel",
             "global_frame": "scan_demo_map", "planning_frame": "scan_demo_odom",
             "robot_frame": "base", "control_frame": "base",
-            "velocity_source": "pose_difference", "path_height_mode": value("path_height_mode"),
+            "velocity_source": value("velocity_source"), "path_height_mode": value("path_height_mode"),
             "unknown_space_policy": "free_inside_bounds",
             "override_config": str(share / "config" / "scan_demo.yaml"),
         }.items())
@@ -115,7 +118,9 @@ def generate_launch_description():
         "pcd_map_file": "", "world_file": "", "scenario_config": "",
         "spawn_x": "0.0", "spawn_y": "0.0", "spawn_z": "0.45",
         "downsample_resolution": "0.1", "crop_half_xy": "4.5", "crop_half_z": "2.0",
-        "path_height_mode": "reference", "rviz": "false",
+        "path_height_mode": "reference", "velocity_source": "odometry_twist",
+        "rviz": "false", "headless": "false",
+        "start_scan": "true",
     }
     return LaunchDescription([DeclareLaunchArgument(name, default_value=default)
                               for name, default in defaults.items()] + [OpaqueFunction(function=_setup)])
