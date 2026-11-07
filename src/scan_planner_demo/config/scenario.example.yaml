@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    # Example only: replace with XYZ waypoints in the chosen PCD/world frame.
+    # z is the Go2 base height when path_height_mode=reference.
+    waypoints: [0.0, 0.0, 0.6, 2.0, 0.0, 0.6]

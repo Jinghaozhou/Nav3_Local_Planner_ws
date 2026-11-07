@@ -1,0 +1,10 @@
+/**:
+  ros__parameters:
+    status_timeout: 0.3
+    controller.kp_position: 0.8
+    controller.kp_yaw: 1.5
+    controller.lookahead: 0.8
+    controller.max_vx: 0.75
+    controller.max_vy: 0.35
+    controller.max_yaw_rate: 1.0
+    controller.heading_threshold: 0.8

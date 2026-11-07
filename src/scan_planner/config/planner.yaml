@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    map.resolution: 0.1
+    map.size: [10.0, 10.0, 5.0]
+    robot.radius: 0.25
+    robot.cylinder_offset: 0.18
+    robot.body_above: 0.1
+    robot.body_below: 0.4
+    planner.horizon: 3.0
+    planner.point_spacing: 0.15
+    planner.reference_corridor: 0.8
+    planner.max_velocity: 0.75
+    planner.max_acceleration: 0.5
+    optimization.smoothness: 1.0
+    optimization.collision: 2.0
+    optimization.feasibility: 0.1
+    optimization.clearance: 0.2
+    goal.xy_tolerance: 0.15
+    goal.z_tolerance: 0.15
+    goal.stopped_velocity: 0.1
+    tf_max_age_for_navigation: 0.5
+    localization_translation_jump: 0.3
+    localization_rotation_jump: 0.15
+    replan_period: 0.3
+    trajectory_lease: 0.8

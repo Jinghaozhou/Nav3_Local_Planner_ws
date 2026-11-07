@@ -8,6 +8,7 @@
 
 # Local map datasets; keep these files on disk, outside source control.
 *.pcd
+!src/scan_planner_demo/test/fixtures/cloud.pcd
 *.bin
 
 # ROS runtime state

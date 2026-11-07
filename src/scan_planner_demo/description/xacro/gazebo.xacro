@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="go2_foot_contact" params="leg">
+    <gazebo reference="${leg}_foot">
+      <mu1>0.6</mu1>
+      <mu2>0.6</mu2>
+      <sensor name="${leg}_foot_contact" type="contact">
+        <always_on>true</always_on>
+        <update_rate>100</update_rate>
+        <topic>/go2/${leg}_foot_contact</topic>
+        <contact>
+          <collision>${leg}_foot_collision</collision>
+        </contact>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+
+  <xacro:macro name="go2_gazebo">
+    <gazebo>
+      <plugin filename="gz_ros2_control-system"
+              name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(find scan_planner_demo)/config/ros2_controllers.yaml</parameters>
+      </plugin>
+    </gazebo>
+
+    <!-- Gazebo's model pose is the source of actual 3-D odometry and TF. -->
+    <gazebo>
+      <plugin filename="libignition-gazebo-odometry-publisher-system.so"
+              name="ignition::gazebo::systems::OdometryPublisher">
+        <odom_frame>scan_demo_odom</odom_frame>
+        <robot_base_frame>base</robot_base_frame>
+        <odom_topic>/model/go2/odometry</odom_topic>
+        <tf_topic>/model/go2/pose</tf_topic>
+        <odom_publish_frequency>50</odom_publish_frequency>
+        <dimensions>3</dimensions>
+      </plugin>
+    </gazebo>
+
+    <gazebo reference="imu_link">
+      <sensor name="imu_sensor" type="imu">
+        <always_on>true</always_on>
+        <update_rate>200</update_rate>
+        <topic>/go2/imu</topic>
+        <imu/>
+      </sensor>
+    </gazebo>
+
+    <xacro:go2_foot_contact leg="FL"/>
+    <xacro:go2_foot_contact leg="FR"/>
+    <xacro:go2_foot_contact leg="RL"/>
+    <xacro:go2_foot_contact leg="RR"/>
+  </xacro:macro>
+</robot>

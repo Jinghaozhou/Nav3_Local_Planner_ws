@@ -1,0 +1,25 @@
+/**:
+  ros__parameters:
+    use_sim_time: false
+    global_frame: map
+    planning_frame: odom
+    # Fast-LIO currently names its IMU origin base_link. Set robot_frame to
+    # a distinct TF frame if the collision reference is elsewhere on the robot.
+    robot_frame: base_link
+    control_frame: base_link
+    velocity_source: pose_difference
+    velocity_filter_alpha: 0.35
+    velocity_max_speed: 3.0
+    tf_max_age: 0.5
+    odom_timeout: 0.5
+    map_timeout: 1.5
+    # PCT already offsets output heights. No implicit +0.4 m is applied.
+    path_height_mode: reference
+    path_z_offset: 0.0
+    body_height: 0.4
+    # A point-only map has no observed-free mask. Motion is disabled with the
+    # conservative default. Select free_inside_bounds explicitly after verifying
+    # the upstream coverage and PCT traversability assumptions.
+    unknown_space_policy: occupied
+    # Optional standard Bool from a localization quality adapter (1 Hz or faster).
+    require_localization_permission: false

@@ -4,7 +4,7 @@
 
 本文记录 SCAN Planner 与 Fast-LIO、KISS 定位、PCT Planner 集成时已经从源码确认的接口差异，以及由这些差异推导出的风险、建议方案和验证方法。当前结论是：这些模块可以通过 ROS 2 接口集成，但仅统一话题名称还不够，必须明确速度、机器人参考点、地图语义、路径高度与失效停车约定。
 
-**本文是问题记录和待讨论方案，不表示下述功能已经实现，也不授权修改其他工作空间。** 本次只新增此报告，未修改任何算法、launch 或参数文件。
+**本文保留重构前的核查基线，不表示所有问题已经解决，也不授权修改其他工作空间。** 重构前的 SCAN 源码现位于 `legacy/planner/`，已修正对应链接；当前实现和验证结果另见 [重构实施记录](refactor_progress.md)。
 
 ## 核查范围与结论边界
 
@@ -58,7 +58,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 录制静止、匀速、转弯和停车数据，对比位移与速度估计，检查单位、方向、延迟和重规划连续性。
 
-依据：[Fast-LIO 里程计发布函数](/home/jinghao/Fast_lio_ws/src/FAST_LIO/src/laserMapping.cpp:632)、[SCAN 速度读取](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:383)。
+依据：[Fast-LIO 里程计发布函数](/home/jinghao/Fast_lio_ws/src/FAST_LIO/src/laserMapping.cpp:632)、[SCAN 速度读取](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:383)。
 
 ### INT-02 base_link 实际是 IMU 本体系 · P0
 
@@ -82,7 +82,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 移动障碍进入和离开视野，检查障碍保留时间；机器人持续移动后检查旧区域清理、地图点数和内存。完整窗口是完整数据快照，不等于窗口包围范围内所有未出现的体素都已被观测为空闲。
 
-依据：[窗口聚合与发布](/home/jinghao/Fast_lio_ws/src/mid360_bringup/mid360_bringup/local_map_window.py:81)、[SCAN 点云回调](/home/jinghao/SCAN-Planner/src/planner/plan_env/src/grid_map.cpp:872)、[SCAN 射线处理](/home/jinghao/SCAN-Planner/src/planner/plan_env/src/grid_map.cpp:542)。
+依据：[窗口聚合与发布](/home/jinghao/Fast_lio_ws/src/mid360_bringup/mid360_bringup/local_map_window.py:81)、[SCAN 点云回调](/home/jinghao/SCAN-Planner/legacy/planner/plan_env/src/grid_map.cpp:872)、[SCAN 射线处理](/home/jinghao/SCAN-Planner/legacy/planner/plan_env/src/grid_map.cpp:542)。
 
 ### INT-04 重复收到消息不代表数据仍然新鲜 · P0
 
@@ -94,7 +94,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 暂停雷达、停止里程计、暂停与回退 rosbag，确认在规定时限内停车并报告具体原因。记录中保留重复时间戳，防止仅按到达频率误判。
 
-依据：[窗口时间戳与重复发布](/home/jinghao/Fast_lio_ws/src/mid360_bringup/mid360_bringup/local_map_window.py:100)、[SCAN 控制循环](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/closed_loop_controller.cpp:120)。
+依据：[窗口时间戳与重复发布](/home/jinghao/Fast_lio_ws/src/mid360_bringup/mid360_bringup/local_map_window.py:100)、[SCAN 控制循环](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/closed_loop_controller.cpp:120)。
 
 ### INT-05 map 路径尚未经过 TF 转换进入局部规划 · P0
 
@@ -106,7 +106,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 使用含非零平移和旋转的 `map → odom`，并覆盖路径先到、TF 后到和 frame 错误情况。仅用单位变换测试不足以证明适配正确。
 
-依据：[SCAN 路径接收](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:339)、[SCAN 默认 frame](/home/jinghao/SCAN-Planner/src/planner/plan_manage/config/planner.yaml:27)。
+依据：[SCAN 路径接收](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:339)、[SCAN 默认 frame](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/config/planner.yaml:27)。
 
 ### INT-06 路径高度已有偏移，可能重复增加机身高度 · P0
 
@@ -118,7 +118,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 在已知地面高度的平地、坡道和不同楼层采样路径 z，与实际 IMU/机身高度和碰撞轮廓比较。
 
-依据：[SCAN 高度调整](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:353)、[PCT 高度生成](/home/jinghao/PCT_planner/src/pct_planner/native/src/trajectory_optimization/gpmp_optimizer/gpmp_optimizer.cc:171)、[PCT 默认参考高度](/home/jinghao/PCT_planner/src/pct_planner/native/src/trajectory_optimization/gpmp_optimizer/gpmp_optimizer.h:66)、[PCT 输出转换](/home/jinghao/PCT_planner/src/pct_planner/pct_planner/core/conversion.py:4)。
+依据：[SCAN 高度调整](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:353)、[PCT 高度生成](/home/jinghao/PCT_planner/src/pct_planner/native/src/trajectory_optimization/gpmp_optimizer/gpmp_optimizer.cc:171)、[PCT 默认参考高度](/home/jinghao/PCT_planner/src/pct_planner/native/src/trajectory_optimization/gpmp_optimizer/gpmp_optimizer.h:66)、[PCT 输出转换](/home/jinghao/PCT_planner/src/pct_planner/pct_planner/core/conversion.py:4)。
 
 ### INT-07 PCT 失败发布空路径，SCAN 当前会忽略 · P0
 
@@ -130,7 +130,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 先成功规划并执行，再让 PCT 返回失败，确认旧路径、旧样条和迟到结果均不能重新使机器人运动。
 
-依据：[PCT 失败处理](/home/jinghao/PCT_planner/src/pct_planner/pct_planner/ros/planner_node.py:171)、[SCAN 空路径处理](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:339)。
+依据：[PCT 失败处理](/home/jinghao/PCT_planner/src/pct_planner/pct_planner/ros/planner_node.py:171)、[SCAN 空路径处理](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:339)。
 
 ### INT-08 TF 持续更新不代表最近全局定位成功 · P0
 
@@ -166,7 +166,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 人为延迟规划、终止规划进程、停止输入，分别检查速度输出和底盘超时停车。允许继续执行旧轨迹的前提必须是轨迹仍有效且已通过必要安全检查。
 
-依据：[SCAN 执行器](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_planner_node.cpp)、[闭环控制循环](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/closed_loop_controller.cpp:120)。
+依据：[SCAN 执行器](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_planner_node.cpp)、[闭环控制循环](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/closed_loop_controller.cpp:120)。
 
 ### INT-11 Topic 与 QoS 需要同时匹配 · P1
 
@@ -178,11 +178,11 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 先发路径再启动 SCAN，重启 SCAN，发布空路径后重启；同时检查 `ros2 topic info --verbose` 中实际端点配置。
 
-依据：[PCT QoS](/home/jinghao/PCT_planner/src/pct_planner/pct_planner/ros/planner_node.py:73)、[SCAN 路径订阅](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:89)、[窗口端点 QoS](/home/jinghao/Fast_lio_ws/src/mid360_bringup/mid360_bringup/local_map_window.py:73)。
+依据：[PCT QoS](/home/jinghao/PCT_planner/src/pct_planner/pct_planner/ros/planner_node.py:73)、[SCAN 路径订阅](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:89)、[窗口端点 QoS](/home/jinghao/Fast_lio_ws/src/mid360_bringup/mid360_bringup/local_map_window.py:73)。
 
 ### INT-12 三维路径不等于已经具备楼梯闭环运动能力 · P1
 
-**当前事实：** SCAN 搜索使用由起终点高度确定的投影高度，局部初始化又按 XY 弧长插值 z，优化梯度的 z 行置零。闭环控制只输出平面速度与转向；简化运动学仿真保持 z 不变。
+**当前事实：** SCAN 搜索使用由起终点高度确定的投影高度，局部初始化又按 XY 弧长插值 z，优化梯度的 z 行置零。闭环控制只输出平面速度与转向；旧简化运动学仿真保持 z 不变，现已归档至 `legacy/demo`。
 
 **潜在影响：** PCT 的楼梯、平台、上下层路径可能被局部高度参考简化；XY 接近的不同楼层可能选错进度。开环三维回放成功也不能证明底盘能沿楼梯运动。
 
@@ -190,7 +190,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 覆盖平地、坡道、楼梯转平台、上下层 XY 重叠和局部遮挡；分别验收轨迹几何、碰撞检查与底盘执行能力。
 
-依据：[投影搜索](/home/jinghao/SCAN-Planner/src/planner/path_searching/src/dyn_a_star.cpp:146)、[局部高度初始化](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/planner_manager.cpp:9)、[优化梯度约束](/home/jinghao/SCAN-Planner/src/planner/bspline_opt/src/bspline_optimizer.cpp:1169)、[平面控制](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/closed_loop_controller.cpp:147)。
+依据：[投影搜索](/home/jinghao/SCAN-Planner/legacy/planner/path_searching/src/dyn_a_star.cpp:146)、[局部高度初始化](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/planner_manager.cpp:9)、[优化梯度约束](/home/jinghao/SCAN-Planner/legacy/planner/bspline_opt/src/bspline_optimizer.cpp:1169)、[平面控制](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/closed_loop_controller.cpp:147)。
 
 ### INT-13 轨迹结束与真实到达终点需要区分 · P1
 
@@ -202,7 +202,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 人为限制底盘运动，使轨迹计时结束但机器人未到；测试相同 XY 不同楼层、目标被障碍占据等情况。
 
-依据：[状态机结束判定](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:635)、[目标回退逻辑](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/scan_replan_fsm.cpp:297)、[控制器终点误差](/home/jinghao/SCAN-Planner/src/planner/plan_manage/src/closed_loop_controller.cpp:148)。
+依据：[状态机结束判定](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:635)、[目标回退逻辑](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/scan_replan_fsm.cpp:297)、[控制器终点误差](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/src/closed_loop_controller.cpp:148)。
 
 ### INT-14 全局地图文件不同，坐标基准未必一致 · P1
 
@@ -226,7 +226,7 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 使用细杆、桌腿、窄通道和移动障碍，记录输入年龄、规划耗时、CPU/内存与停止距离。
 
-依据：[窗口默认参数](/home/jinghao/Fast_lio_ws/src/mid360_bringup/launch/mid360_mapping.launch.py:105)、[SCAN 地图参数](/home/jinghao/SCAN-Planner/src/planner/plan_manage/config/planner.yaml:13)。
+依据：[窗口默认参数](/home/jinghao/Fast_lio_ws/src/mid360_bringup/launch/mid360_mapping.launch.py:105)、[SCAN 地图参数](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/config/planner.yaml:13)。
 
 ### INT-16 ROS 包独立性、内部轨迹协议和交付配置仍需整理 · P2
 
@@ -238,7 +238,31 @@ Fast-LIO 下表接口以 `mid360_bringup/mid360_mapping.launch.py` 组合启动�
 
 **验证方法：** 不安装 Go2 仿真、不引入其他算法源码时单独构建和启动 SCAN；使用模拟输入验收；在干净终端检查 overlay 加载顺序及包路径。
 
-依据：[SCAN 包依赖](/home/jinghao/SCAN-Planner/src/planner/plan_manage/package.xml)、[SCAN 启动入口](/home/jinghao/SCAN-Planner/src/planner/plan_manage/launch/run.launch.py)、[内部样条消息](/home/jinghao/SCAN-Planner/src/planner/scan_planner_msgs/msg/Bspline.msg)。
+依据：[SCAN 包依赖](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/package.xml)、[SCAN 启动入口](/home/jinghao/SCAN-Planner/legacy/planner/plan_manage/launch/run.launch.py)、[内部样条消息](/home/jinghao/SCAN-Planner/legacy/planner/scan_planner_msgs/msg/Bspline.msg)。
+
+### INT-17 PCD 点云与 Gazebo 碰撞网格存在量化和缺失面风险 · P1
+
+**当前事实：** 新测试包从同一份 PCD 裁剪 SCAN 局部点云，并将指定区域的已有点体素化成 Gazebo 静态 OBJ/SDF。转换器不补地面；体素尺寸改变实际接触表面的位置和形状。此链路已经过转换测试，但未在 Gazebo 中完成场景验收。
+
+**潜在影响：** 稀疏地面会留下碰撞孔洞，台阶边缘可能与原 PCD 相差一个体素，Go2 会跌落、卡住或踩在与 SCAN 地图不一致的位置。
+
+**建议方案：** 每份地图显式记录转换边界、体素分辨率和机器人出生位置；在 Gazebo/RViz 叠加检查地面、台阶和障碍。缺失的地面需要地图数据修复，不能让转换器悄悄推断为可通行。
+
+**验证方法：** 对坡道、台阶、孔洞及上下层交叠区域比较 PCD 与碰撞表面，并运行站立与低速接触测试。
+
+依据：[PCD 转换工具](../src/scan_planner_demo/scripts/pcd_to_sdf.py)、[局部点云节点](../src/scan_planner_demo/src/pcd_local_map_node.cpp)。
+
+### INT-18 仿真三维里程计不等于已具备稳定步态 · P1
+
+**当前事实：** Go2 模型新增 Gazebo 3D 里程计插件，明确要求 `dimensions=3`；测试包新增 `cmd_vel` 到 12 个关节目标的初步足端轨迹适配。Gazebo 运行依赖尚未安装，本机未完成物理运动验证。
+
+**潜在影响：** 即使 `/scan_demo/odom` 和 `odom→base` 有高度，关节控制仍可能无法稳定前进、爬坡或跨台阶。重复发布 TF 或把仿真真值误作真实定位精度也会误导集成判断。
+
+**建议方案：** 由 Gazebo 里程计桥接独占 `odom→base`，`robot_state_publisher` 负责关节树，`map→odom` 在独立演示中按同源地图发布固定变换。按站立、水平行走、坡道、楼梯逐级验收；失败时调整或替换步态控制，不让 SCAN 路径直接改写模型位姿。
+
+**验证方法：** 核查 TF 树唯一性、里程计实际 z/速度、四足接触、机身姿态、实际轨迹与 SCAN 轨迹误差及停车行为。
+
+依据：[Go2 模型插件](../src/scan_planner_demo/description/xacro/gazebo.xacro)、[测试步态适配器](../src/scan_planner_demo/src/go2_cmd_vel_gait.cpp)。
 
 ## 建议的验证顺序
 

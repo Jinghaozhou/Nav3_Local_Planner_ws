@@ -20,3 +20,8 @@ ament_cmake, colcon, rclcpp, RViz2, tf2_ros and ROS 2 launch integration.
 
 The upstream authors and maintainers are not affiliated with, and do not
 necessarily endorse, this port.
+
+The Go2 robot description and mesh assets included in scan_planner_demo are
+derived from Unitree Robotics' unitree_ros/robots/go2_description and retain
+their BSD-3-Clause license and copyright notice in
+src/scan_planner_demo/description/LICENSE-BSD-3-Clause.txt.
