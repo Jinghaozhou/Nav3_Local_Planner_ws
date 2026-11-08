@@ -36,8 +36,8 @@ source install/gazebo_demo/setup.bash
 
 ```bash
 python3 src/scan_planner_demo/scripts/pcd_to_sdf.py \
-  src/scan_planner_demo/maps/building2_9.pcd \
-  --output build/gazebo_demo/demo_world/building_flat.sdf \
+  src/scan_planner_demo/maps/pcd/building2_9.pcd \
+  --output src/scan_planner_demo/maps/gazebo/building_flat.sdf \
   --bounds 2 6 0 2 -0.1 1.2 --resolution 0.10
 ```
 
@@ -53,8 +53,8 @@ python3 src/scan_planner_demo/scripts/pcd_to_sdf.py \
 
 ```bash
 ros2 launch scan_planner_demo simulation.launch.py \
-  pcd_map_file:="$PWD/src/scan_planner_demo/maps/building2_9.pcd" \
-  world_file:="$PWD/build/gazebo_demo/demo_world/building_flat.sdf" \
+  pcd_map_file:="$PWD/src/scan_planner_demo/maps/pcd/building2_9.pcd" \
+  world_file:="$PWD/src/scan_planner_demo/maps/gazebo/building_flat.sdf" \
   scenario_config:="$PWD/src/scan_planner_demo/config/scenario.building2_9.yaml" \
   spawn_x:=3.0 spawn_y:=1.0 spawn_z:=0.43 rviz:=true
 ```
@@ -67,8 +67,10 @@ ros2 launch scan_planner_demo simulation.launch.py \
 PCD 节点依据里程计裁剪 `/scan_demo/local_map`，SCAN 发布
 `/scan_demo/scan_planner/local_path` 和 `/scan_demo/cmd_vel`。
 
-五份本机 PCD 位于 [测试包 maps 目录](src/scan_planner_demo/maps/README.md)，
-不随 Git 分发或安装。当前测试步态节点是初步足端轨迹/逆运动学适配；
+五份本机 PCD 位于 [maps/pcd](src/scan_planner_demo/maps/pcd/README.md)，
+生成的 SDF、OBJ、JSON 位于 [maps/gazebo](src/scan_planner_demo/maps/gazebo/README.md)。
+地图文件不随 Git 分发或安装，也不会被清理 `build/` 时删除。当前测试步态
+节点是初步足端轨迹/逆运动学适配；
 平坦区域的短时站立和关节控制已运行，朝目标稳定行走、避障及爬楼仍需
 验收。本次 `building2_9.pcd` 约 26 秒测试中，目标位于 x=5 m，Go2 却
 从 x=3 m 漂移到约 x=2.917 m，因此不能把此示例视为完成目标点导航。
@@ -79,7 +81,8 @@ PCD 节点依据里程计裁剪 `/scan_demo/local_map`，SCAN 发布
 
 原先的 `map.pcd` 平地场景仍可使用：转换边界为
 `--bounds -1 3 -1 1 0 1 --resolution 0.10`，场景配置为
-`scenario.flat_map.yaml`，出生点为 `(0,0,0.43)`。两份场景的转换产物
+`scenario.flat_map.yaml`，出生点为 `(0,0,0.43)`；其源地图是
+`maps/pcd/map.pcd`，转换输出是 `maps/gazebo/flat_patch.sdf`。两份场景的转换产物
 分别命名，启动时会核对 PCD 与碰撞网格元数据。
 
 需要单独检查 Go2 步态时，可在启动命令末尾追加 `start_scan:=false`，

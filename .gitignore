@@ -10,6 +10,10 @@
 *.pcd
 !src/scan_planner_demo/test/fixtures/cloud.pcd
 *.bin
+# Generated Gazebo worlds contain absolute local PCD and mesh paths.
+/src/scan_planner_demo/maps/gazebo/*.sdf
+/src/scan_planner_demo/maps/gazebo/*.obj
+/src/scan_planner_demo/maps/gazebo/*.json
 
 # ROS runtime state
 /.ros/

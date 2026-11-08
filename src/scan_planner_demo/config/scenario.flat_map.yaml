@@ -1,5 +1,5 @@
 /**:
   ros__parameters:
-    # Local test on maps/map.pcd, bounds x[-1,3], y[-1,1], z[0,1].
+    # Local test on maps/pcd/map.pcd, bounds x[-1,3], y[-1,1], z[0,1].
     # The reference z is the Go2 base height above this PCD's floor.
     waypoints: [0.0, 0.0, 0.40, 2.0, 0.0, 0.40]

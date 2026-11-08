@@ -82,7 +82,7 @@ colcon test-result --test-result-base build/merged --verbose
 
 ## 2026-11-07 测试包调整与待验收项
 
-原 `src/simulator` 已归档至 `legacy/simulator`；当前 `colcon list --base-paths src` 仅发现 `scan_planner`、`scan_planner_msgs`、`scan_planner_demo`。五份本机 PCD 移至 `src/scan_planner_demo/maps`，继续由 `*.pcd` 忽略，不随 Git 或安装包分发。
+原 `src/simulator` 已归档至 `legacy/simulator`；当前 `colcon list --base-paths src` 仅发现 `scan_planner`、`scan_planner_msgs`、`scan_planner_demo`。五份本机 PCD 位于 `src/scan_planner_demo/maps/pcd`，生成的碰撞场景位于 `src/scan_planner_demo/maps/gazebo`；两类地图都不随 Git 或安装包分发，也不再依赖 `build/` 目录保存。
 
 测试包新增 PCD 裁剪节点、静态 PCD 体素网格转 SDF 工具、Go2 `cmd_vel` 到关节目标的初步步态节点、Gazebo 三维里程计桥接与统一启动文件。转换器对实际 `building2_9.pcd` 的示例区域生成 1019 个占据体素，二进制/ASCII PCD 测试和 PCD 节点 ROS 裁剪/发布测试通过；`build/gazebo_demo` 与 `install/gazebo_demo` 的全新构建通过，完整 `colcon test-result` 为 7 项、0 错误、0 失败。Go2 模型资源已迁入测试包并保留 BSD-3-Clause 许可。
 
@@ -107,3 +107,12 @@ colcon test-result --test-result-base build/merged --verbose
 5. 旧 OpenGL、程序地图生成和平面运动学后端已归档至 `legacy`；新 Gazebo 后端已通过短时平地启动与话题联通验证，步态控制和复杂地形仍需物理验收。
 
 当前启动和参数说明见 [RUNNING.md](../RUNNING.md)、[集成说明](../src/scan_planner/docs/integration.md) 和 [接口协议](../src/scan_planner/docs/interfaces.md)。
+
+## 2026-11-08 地图目录整理
+
+五份原始点云移至 `src/scan_planner_demo/maps/pcd/`；从 `building2_9.pcd`
+及 `map.pcd` 生成的 SDF、OBJ、JSON 移至 `maps/gazebo/` 并按新绝对路径
+重新生成。旧 `build/gazebo_demo/demo_world/` 中的重复及失败实验产物已清理。
+两类大体积或机器相关地图文件继续由 Git 忽略，不随安装包分发；清理
+`build/` 不再删除已生成的碰撞场景。新路径下的无界面启动复测收到了
+里程计、局部点云和非空局部轨迹；测试进程已停止。
