@@ -22,7 +22,7 @@ ros2 launch scan_planner scan_planner.launch.py
 
 测试包使用 Gazebo Fortress。运行前需在 ROS 2 Humble 环境安装 `ros_gz`、
 `gz_ros2_control`、`ros2_controllers`、`xacro` 与 RViz。本机现已安装这些
-组件，并在无界面 Gazebo 中验证了以下平坦 PCD 示例。
+组件，并在无界面 Gazebo 中验证了以下 `building2_9.pcd` 示例。
 
 ```bash
 colcon build --base-paths src --packages-up-to scan_planner_demo \
@@ -36,15 +36,15 @@ source install/gazebo_demo/setup.bash
 
 ```bash
 python3 src/scan_planner_demo/scripts/pcd_to_sdf.py \
-  src/scan_planner_demo/maps/map.pcd \
-  --output build/gazebo_demo/demo_world/flat_patch.sdf \
-  --bounds -1 3 -1 1 0 1 --resolution 0.10
+  src/scan_planner_demo/maps/building2_9.pcd \
+  --output build/gazebo_demo/demo_world/building_flat.sdf \
+  --bounds 2 6 0 2 -0.1 1.2 --resolution 0.10
 ```
 
-这份本机 PCD 的示例区域含连续平地，已在无界面 Gazebo 中观察到 Go2
-保持站立、SCAN 进入 RUNNING 并输出局部轨迹。此前使用的 `building2_9.pcd`
-原点附近存在缺失地面，Go2 会掉出碰撞场景；不能将任意 PCD 区域直接
-当作可通行地形。先检查生成的 OBJ/SDF 地面和障碍。转换时只处理
+这份 PCD 的 `x∈[2,6]、y∈[0,2]` 区域含连续的 `z≈0` 地面；出生点
+`(3,1)` 已在无界面 Gazebo 中保持站立，SCAN 进入 RUNNING 并输出局部
+轨迹。此前使用的同一 PCD 的原点附近是地面边缘，Go2 会掉出碰撞场景；
+不能将任意区域直接当作可通行地形。转换时只处理
 指定边界内的点，PCD 与 OBJ/SDF 保留相同世界坐标；局部地图节点也使用
 同一边界裁剪 PCD。同时写出同名 JSON 元数据，启动时核对 PCD、碰撞网格
 和 SDF 的来源。
@@ -53,15 +53,15 @@ python3 src/scan_planner_demo/scripts/pcd_to_sdf.py \
 
 ```bash
 ros2 launch scan_planner_demo simulation.launch.py \
-  pcd_map_file:="$PWD/src/scan_planner_demo/maps/map.pcd" \
-  world_file:="$PWD/build/gazebo_demo/demo_world/flat_patch.sdf" \
-  scenario_config:="$PWD/src/scan_planner_demo/config/scenario.flat_map.yaml" \
-  spawn_x:=0.0 spawn_y:=0.0 spawn_z:=0.43 rviz:=true
+  pcd_map_file:="$PWD/src/scan_planner_demo/maps/building2_9.pcd" \
+  world_file:="$PWD/build/gazebo_demo/demo_world/building_flat.sdf" \
+  scenario_config:="$PWD/src/scan_planner_demo/config/scenario.building2_9.yaml" \
+  spawn_x:=3.0 spawn_y:=1.0 spawn_z:=0.43 rviz:=true
 ```
 
 在无图形界面的环境中将最后的 `rviz:=true` 改为 `rviz:=false headless:=true`。
 
-`scenario.flat_map.yaml` 只适用于上述 `map.pcd` 区域，不能作为其他地图的
+`scenario.building2_9.yaml` 只适用于上述 PCD 区域，不能作为其他地图的
 导航路线。应在 RViz 中确认地面、楼梯与目标后改写 `waypoints`、出生
 位置和 SCAN 路径高度模式。Gazebo 根据实际物理位姿发布 3D 里程计与 TF；
 PCD 节点依据里程计裁剪 `/scan_demo/local_map`，SCAN 发布
@@ -70,11 +70,17 @@ PCD 节点依据里程计裁剪 `/scan_demo/local_map`，SCAN 发布
 五份本机 PCD 位于 [测试包 maps 目录](src/scan_planner_demo/maps/README.md)，
 不随 Git 分发或安装。当前测试步态节点是初步足端轨迹/逆运动学适配；
 平坦区域的短时站立和关节控制已运行，朝目标稳定行走、避障及爬楼仍需
-验收。20 秒平地测试中，SCAN 给出正向线速度，但 Go2 发生约 5 cm 反向
-漂移，因此不能把此示例视为完成目标点导航。独立给步态节点持续发送
+验收。本次 `building2_9.pcd` 约 26 秒测试中，目标位于 x=5 m，Go2 却
+从 x=3 m 漂移到约 x=2.917 m，因此不能把此示例视为完成目标点导航。
+独立给步态节点持续发送
 `linear.x=0.15` 时，Go2 约 18 秒前进 0.63 m；原地给出正向角速度时
 机身也朝正向旋转。闭环中主要问题是规划重启时的微小反向初速使轨迹
 先指向后方，控制器大量处于 `Turning before translation` 状态。
+
+原先的 `map.pcd` 平地场景仍可使用：转换边界为
+`--bounds -1 3 -1 1 0 1 --resolution 0.10`，场景配置为
+`scenario.flat_map.yaml`，出生点为 `(0,0,0.43)`。两份场景的转换产物
+分别命名，启动时会核对 PCD 与碰撞网格元数据。
 
 需要单独检查 Go2 步态时，可在启动命令末尾追加 `start_scan:=false`，
 再另开终端向 `/scan_demo/cmd_vel` 发布测试速度。此模式不会运行 SCAN，

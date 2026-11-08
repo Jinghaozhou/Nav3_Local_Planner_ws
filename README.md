@@ -87,7 +87,7 @@ source install/gazebo_demo/setup.bash
 
 测试速度话题为 `/scan_demo/cmd_vel`，不使用真实 `/cmd_vel`。需要先从同一份 PCD 转换碰撞场景、指定与地图对齐的出生位置和三维路径；完整命令见 [运行说明](RUNNING.md)。
 
-本机 PCD 已集中放入 [测试包 maps 目录](src/scan_planner_demo/maps/README.md)。SCAN 直接读取并裁剪 PCD，不使用模拟激光雷达；Gazebo 从同一份 PCD 转出的静态网格处理碰撞。已用 `map.pcd` 平坦区域验证 Gazebo 站立、三维里程计、局部轨迹和非零速度发布。隔离测试中 Go2 能按正向指令前进和转向；SCAN 闭环仍有轨迹起始方向反复变化的问题，尚未验证目标到达或爬楼。
+本机 PCD 已集中放入 [测试包 maps 目录](src/scan_planner_demo/maps/README.md)。SCAN 直接读取并裁剪 PCD，不使用模拟激光雷达；Gazebo 从同一份 PCD 转出的静态网格处理碰撞。已用 `building2_9.pcd` 的连续地面区域及 `map.pcd` 平坦区域验证 Gazebo 站立、三维里程计、局部轨迹和非零速度发布。隔离测试中 Go2 能按正向指令前进和转向；SCAN 闭环仍有轨迹起始方向反复变化的问题，尚未验证目标到达或爬楼。
 
 ```bash
 colcon test --base-paths src --build-base build/gazebo_demo \

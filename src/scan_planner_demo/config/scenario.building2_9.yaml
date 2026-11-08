@@ -1,0 +1,5 @@
+/**:
+  ros__parameters:
+    # Existing floor inside building2_9.pcd: x[2,6], y[0,2], z[-0.1,1.2].
+    # z is the Go2 base height in the PCD frame, not the floor height.
+    waypoints: [3.0, 1.0, 0.40, 5.0, 1.0, 0.40]

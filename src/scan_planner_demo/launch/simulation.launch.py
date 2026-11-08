@@ -2,6 +2,7 @@
 
 import os
 import json
+import math
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -41,6 +42,12 @@ def _setup(context):
     bounds = metadata["bounds"]
     if len(bounds) != 6 or not all(bounds[i] < bounds[i + 1] for i in (0, 2, 4)):
         raise ValueError("Invalid PCD/world bounds in conversion metadata")
+    spawn_position = tuple(float(value(axis)) for axis in ("spawn_x", "spawn_y", "spawn_z"))
+    if not all(math.isfinite(coordinate) for coordinate in spawn_position):
+        raise ValueError("Go2 spawn coordinates must be finite")
+    if not (bounds[0] <= spawn_position[0] < bounds[1] and
+            bounds[2] <= spawn_position[1] < bounds[3]):
+        raise ValueError("Go2 spawn XY is outside the converted PCD world bounds")
 
     gz_share = Path(get_package_share_directory("ros_gz_sim"))
 
