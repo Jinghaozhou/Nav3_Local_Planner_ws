@@ -1,11 +1,18 @@
 /**:
   ros__parameters:
+    # Smooth the gait's short-lived vertical and fore-aft odometry twist peaks.
+    twist_velocity_filter_tau: 0.30
     # Gazebo resolves leg/ground contact. SCAN's envelope models only the
     # collision body; otherwise supporting floor points occupy the robot.
     robot.body_below: 0.12
     robot.body_above: 0.12
     planner.max_velocity: 0.22
     planner.max_acceleration: 0.25
+    planner.start_velocity_xy_deadband: 0.05
+    planner.start_velocity_z_deadband: 0.08
     controller.max_vx: 0.22
     controller.max_vy: 0.10
     controller.max_yaw_rate: 0.40
+    controller.heading_preview_distance: 0.25
+    controller.preview_position_gain: 0.60
+    controller.heading_threshold: 0.50

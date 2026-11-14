@@ -11,11 +11,15 @@ InputAdapter::InputAdapter(rclcpp::Node &node,FrameTransformer &frames)
   global_frame_=node.declare_parameter<std::string>("global_frame","map");
   robot_frame_=node.declare_parameter<std::string>("robot_frame","base_link");
   velocity_source_=node.declare_parameter<std::string>("velocity_source","pose_difference");
+  const double twist_filter_tau=node.declare_parameter<double>("twist_velocity_filter_tau",0.0);
   tf_age_=node.declare_parameter<double>("tf_max_age",0.5);
   const double alpha=node.get_parameter("velocity_filter_alpha").as_double();
   const double speed=node.get_parameter("velocity_max_speed").as_double();
   if ((velocity_source_!="pose_difference" && velocity_source_!="odometry_twist") ||
-      !(alpha>0 && alpha<=1 && speed>0 && tf_age_>0)) throw std::invalid_argument("Invalid velocity/TF parameters");
+      !(alpha>0 && alpha<=1 && speed>0 && tf_age_>0) ||
+      !std::isfinite(twist_filter_tau) || twist_filter_tau<0 || twist_filter_tau>1.0)
+    throw std::invalid_argument("Invalid velocity/TF parameters");
+  twist_filter_.setTimeConstant(twist_filter_tau);
 }
 bool InputAdapter::odometry(const nav_msgs::msg::Odometry &m,RobotState &state) {
   const rclcpp::Time stamp(m.header.stamp,RCL_ROS_TIME);
@@ -29,8 +33,8 @@ bool InputAdapter::odometry(const nav_msgs::msg::Odometry &m,RobotState &state) 
   const Eigen::Vector3d linear(m.twist.twist.linear.x,m.twist.twist.linear.y,m.twist.twist.linear.z);
   const Eigen::Vector3d angular(m.twist.twist.angular.x,m.twist.twist.angular.y,m.twist.twist.angular.z);
   if (!linear.allFinite() || !angular.allFinite()) throw std::invalid_argument("Invalid odometry twist");
-  state.velocity=measured.linear()*(linear+angular.cross(offset.translation()));
-  return true;
+  const Eigen::Vector3d measured_velocity=measured.linear()*(linear+angular.cross(offset.translation()));
+  return twist_filter_.update(measured_velocity,stamp.seconds(),state.velocity);
 }
 Path InputAdapter::cloud(const sensor_msgs::msg::PointCloud2 &m) {
   if (m.point_step==0 || m.width==0 || m.height==0 ||

@@ -9,6 +9,8 @@
     control_frame: base_link
     velocity_source: pose_difference
     velocity_filter_alpha: 0.35
+    # Applied only to velocity_source=odometry_twist; 0 disables smoothing.
+    twist_velocity_filter_tau: 0.0
     velocity_max_speed: 3.0
     tf_max_age: 0.5
     odom_timeout: 0.5

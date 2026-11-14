@@ -64,6 +64,31 @@ TEST(Planner, FlatPathAndWholeTrajectoryCollisionValidation) {
   EXPECT_FALSE(planner.reached(state,{0,0,2}));
   state.velocity={0.3,0,0}; EXPECT_FALSE(planner.reached(state,state.position));
 }
+TEST(Planner, WholeTrajectoryCollisionUsesApproachYawAtEndpoint) {
+  MapParameters parameters;
+  parameters.resolution=0.05;
+  parameters.radius=0.1;
+  parameters.cylinder_offset=0.2;
+  parameters.body_above=0.1;
+  parameters.body_below=0.1;
+  parameters.allow_unobserved_space=true;
+  GridMap map(parameters);
+  map.updateSnapshot({Eigen::Vector3d(0.25,0,0.5)},Eigen::Vector3d(0,-0.5,0.5));
+
+  Eigen::MatrixXd control(3,6);
+  control.row(0).setZero();
+  control.row(1)<<-1,-1,-1,0,0,0;
+  control.row(2).setConstant(0.5);
+  Trajectory trajectory{UniformBspline(control,3,0.5),0.0};
+  trajectory.duration=trajectory.position.getTimeSum();
+  const Eigen::Vector3d end=trajectory.position.evaluateDeBoorT(trajectory.duration);
+  EXPECT_EQ(map.getInflateOccupancy(end,0.0),1);
+  EXPECT_EQ(map.getInflateOccupancy(end,1.5707963267948966),0);
+  EXPECT_TRUE(collisionFree(trajectory,map,1.0));
+
+  map.updateSnapshot({Eigen::Vector3d(0,0,0.5)},Eigen::Vector3d(0,-0.5,0.5));
+  EXPECT_FALSE(collisionFree(trajectory,map,1.0));
+}
 TEST(Planner, OccupiedStartAndUnknownSnapshotCannotMove) {
   MapParameters map; map.allow_unobserved_space=true;
   PlannerManager planner(map,{},{}); RobotState state;
@@ -112,6 +137,43 @@ TEST(Planner, ReplansWithBoundaryVelocityAndAReferenceProgressGap) {
     }
   }
 }
+TEST(Planner, IgnoresContactJitterButKeepsMeasuredMotion) {
+  MapParameters map;map.allow_unobserved_space=true;
+  PlannerParameters parameters;parameters.max_velocity=0.22;parameters.max_acceleration=0.25;
+  parameters.start_velocity_xy_deadband=0.05;
+  parameters.start_velocity_z_deadband=0.08;
+  OptimizationParameters optimization;
+  optimization.max_velocity=parameters.max_velocity;
+  optimization.max_acceleration=parameters.max_acceleration;
+  PlannerManager planner(map,parameters,optimization);
+  RobotState state;state.position={0,0,0.5};state.velocity={-0.02,0,-0.04};
+  const Path reference{{0.13,0,0.5},{1,0,0.5},{2,0,0.5}};
+  const Path cloud{{4,4,0}};
+  auto settled=planner.plan(state,reference,cloud);
+  ASSERT_TRUE(settled.success) << settled.reason;
+  auto start_velocity=settled.trajectory.position.getDerivative();
+  EXPECT_NEAR(start_velocity.evaluateDeBoorT(0).norm(),0.0,1e-6);
+  TrackerParameters tracker;tracker.heading_preview_distance=0.10;
+  EXPECT_FALSE(track(state,settled.trajectory,0,tracker).frozen);
+  EXPECT_NEAR(track(state,settled.trajectory,0,tracker).vx,0.0,1e-6);
+  tracker.preview_position_gain=0.40;
+  EXPECT_GT(track(state,settled.trajectory,0,tracker).vx,0.015);
+
+  state.velocity={-0.12,0,0};
+  auto moving=planner.plan(state,reference,cloud);
+  ASSERT_TRUE(moving.success) << moving.reason;
+  start_velocity=moving.trajectory.position.getDerivative();
+  EXPECT_NEAR(start_velocity.evaluateDeBoorT(0).x(),-0.12,1e-6);
+
+  // Vertical contact jitter is ignored before deciding whether the start
+  // tangent exceeds the planner's dynamic limit.
+  state.velocity={0.215,0,0.06};
+  auto jitter=planner.plan(state,reference,cloud);
+  EXPECT_NE(jitter.reason,"Measured start velocity exceeds the configured planning limit");
+  state.velocity={0.27,0,0};
+  auto overspeed=planner.plan(state,reference,cloud);
+  EXPECT_EQ(overspeed.reason,"Measured start velocity exceeds the configured planning limit");
+}
 TEST(Tracker, TurnsBeforeTranslationAndStopsAfterDuration) {
   Eigen::MatrixXd cp=Eigen::MatrixXd::Zero(3,6);
   for(int i=0;i<6;++i) cp(0,i)=i*0.2;
@@ -121,4 +183,20 @@ TEST(Tracker, TurnsBeforeTranslationAndStopsAfterDuration) {
   EXPECT_TRUE(turning.frozen); EXPECT_DOUBLE_EQ(turning.vx,0); EXPECT_DOUBLE_EQ(turning.vy,0);
   const auto stopped=track(state,trajectory,2,{});
   EXPECT_DOUBLE_EQ(stopped.vx,0); EXPECT_DOUBLE_EQ(stopped.yaw_rate,0);
+}
+TEST(Tracker, LooksPastShortReverseContactSegmentForHeading) {
+  Eigen::MatrixXd cp=Eigen::MatrixXd::Zero(3,7);
+  cp.row(0)<<0.052,0,-0.052,-0.025,0.103,0.25,0.4;
+  Trajectory trajectory{UniformBspline(cp,3,2.38),9.52};
+  RobotState state;
+  TrackerParameters tracker;tracker.lookahead=0.8;
+  EXPECT_TRUE(track(state,trajectory,0,tracker).frozen);
+  tracker.heading_preview_distance=0.10;
+  EXPECT_FALSE(track(state,trajectory,0,tracker).frozen);
+  tracker.preview_position_gain=0.4;
+  state.orientation=Eigen::AngleAxisd(M_PI,Eigen::Vector3d::UnitZ());
+  const auto turning=track(state,trajectory,0,tracker);
+  EXPECT_TRUE(turning.frozen);
+  EXPECT_DOUBLE_EQ(turning.vx,0);
+  EXPECT_DOUBLE_EQ(turning.vy,0);
 }

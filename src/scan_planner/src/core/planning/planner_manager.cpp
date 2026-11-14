@@ -9,7 +9,11 @@ PlannerManager::PlannerManager(const MapParameters &map, const PlannerParameters
   : map_(std::make_shared<GridMap>(map)), parameters_(p) {
   if (!(p.horizon > 0 && p.point_spacing > 0 && p.max_velocity > 0 && p.max_acceleration > 0 &&
         p.reference_corridor > 0) || !std::isfinite(p.horizon + p.point_spacing +
-        p.max_velocity + p.max_acceleration + p.reference_corridor))
+        p.max_velocity + p.max_acceleration + p.reference_corridor +
+        p.start_velocity_xy_deadband + p.start_velocity_z_deadband) ||
+      p.start_velocity_xy_deadband < 0 || p.start_velocity_z_deadband < 0 ||
+      p.start_velocity_xy_deadband >= p.max_velocity ||
+      p.start_velocity_z_deadband >= p.max_velocity)
     throw std::invalid_argument("Invalid planning limits");
   optimizer_.setParam(optimization);
   optimizer_.setEnvironment(map_);
@@ -33,7 +37,13 @@ bool collisionFree(const Trajectory &trajectory, const GridMap &map, double max_
     const double sample = std::min(t, trajectory.duration);
     const Eigen::Vector3d point = position.evaluateDeBoorT(sample);
     const Eigen::Vector3d next = position.evaluateDeBoorT(std::min(sample + dt, trajectory.duration));
-    const Eigen::Vector3d delta = next - point;
+    Eigen::Vector3d delta = next - point;
+    // At the final sample next == point. Preserve the approach direction for
+    // the yaw-dependent robot envelope instead of checking an arbitrary yaw 0.
+    if (delta.head<2>().squaredNorm() < 1e-12 && sample > 0.0) {
+      const Eigen::Vector3d previous = position.evaluateDeBoorT(std::max(0.0, sample - dt));
+      delta = point - previous;
+    }
     if (!point.allFinite() || map.getInflateOccupancy(point, std::atan2(delta.y(), delta.x())) != 0) return false;
   }
   return true;
@@ -61,19 +71,24 @@ PlanResult PlannerManager::plan(const RobotState &state, const Path &reference, 
   for (std::size_t i=1; i<samples.size(); ++i) length += (samples[i] - samples[i-1]).norm();
   // Rest at every local endpoint; never extrapolate motion into an unplanned region.
   double interval = std::max(0.15, length / (samples.size()-1) / (parameters_.max_velocity * 0.6));
-  std::vector<Eigen::Vector3d> derivatives{state.velocity, Eigen::Vector3d::Zero(),
-                                         Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
-  if(state.velocity.norm()>parameters_.max_velocity+1e-3) {
+  Eigen::Vector3d start_velocity=state.velocity;
+  if(start_velocity.head<2>().norm()<parameters_.start_velocity_xy_deadband)
+    start_velocity.head<2>().setZero();
+  if(std::abs(start_velocity.z())<parameters_.start_velocity_z_deadband)
+    start_velocity.z()=0.0;
+  if(start_velocity.norm()>parameters_.max_velocity+1e-3) {
     result.reason="Measured start velocity exceeds the configured planning limit";return result;
   }
+  std::vector<Eigen::Vector3d> derivatives{start_velocity, Eigen::Vector3d::Zero(),
+                                         Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()};
   for(int attempt=0;attempt<8;++attempt) {
     Eigen::MatrixXd control_points;
     UniformBspline::parameterizeToBspline(interval, samples, derivatives, control_points);
     // The upstream least-squares fit only approximates endpoint constraints.
     // Fix the three boundary control points before optimizing the interior.
-    control_points.col(0)=state.position-state.velocity*interval;
+    control_points.col(0)=state.position-start_velocity*interval;
     control_points.col(1)=state.position;
-    control_points.col(2)=state.position+state.velocity*interval;
+    control_points.col(2)=state.position+start_velocity*interval;
     control_points.col(control_points.cols()-3)=samples.back();
     control_points.col(control_points.cols()-2)=samples.back();
     control_points.col(control_points.cols()-1)=samples.back();

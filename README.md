@@ -1,6 +1,6 @@
-# SCAN Planner ROS 2 导航模块
+# Nav3 Local Planner 工作空间
 
-面向 ROS 2 Humble 的独立局部规划与速度控制模块。输入 Fast-LIO 连续里程计、滑动窗口点云、全局定位 TF 和 PCT 三维参考路径，输出局部轨迹、规划状态与底盘速度。算法核心与 ROS 通信分离，集成启动不加载外部定位算法或仿真器。
+工作空间目录为 `/home/jinghao/Nav3_Local_Planner_ws`，其中的 ROS 2 功能包仍叫 `scan_planner`、`scan_planner_msgs` 和 `scan_planner_demo`，算法名称仍为 SCAN Planner。面向 ROS 2 Humble 的局部规划与速度控制模块输入 Fast-LIO 连续里程计、滑动窗口点云、全局定位 TF 和 PCT 三维参考路径，输出局部轨迹、规划状态与底盘速度。算法核心与 ROS 通信分离，集成启动不加载外部定位算法或仿真器。
 
 本项目衍生自 [wuyi2121/SCAN-Planner](https://github.com/wuyi2121/SCAN-Planner)。核心算法、原始项目设计和研究成果归功于 Han Zheng、Zhe Chen、Yiwen Fu、Ming Yang 和 Tong Qin。原 ROS 2 移植署名及第三方声明保留在 [NOTICE](NOTICE)，本次模块化整理不代表原作者的官方发布或认可。
 
@@ -21,7 +21,8 @@ src/
     ├── description/     # Go2 模型与许可证
     ├── maps/            # 本地 PCD，不纳入 Git
     ├── scripts/         # PCD→SDF 离线转换、路径发布
-    └── src/             # PCD 裁剪、测试步态控制
+    ├── src/             # PCD 裁剪、Go2 测试步态适配
+    └── third_party/champ/ # BSD-3-Clause CHAMP 步态核心
 legacy/                  # 旧规划器、平面演示和原 simulator；COLCON_IGNORE
 report/                  # 集成问题及实施验证记录
 ```
@@ -33,7 +34,7 @@ report/                  # 集成问题及实施验证记录
 当前目标为 ROS 2 Humble、C++17。集成模块不依赖其他三个算法工作空间的源码，也不依赖 Go2、PCL 或 cv_bridge。
 
 ```bash
-cd /home/jinghao/SCAN-Planner
+cd /home/jinghao/Nav3_Local_Planner_ws
 source /opt/ros/humble/setup.bash
 colcon build --base-paths src --packages-up-to scan_planner \
   --build-base build/merged --install-base install/merged \
@@ -86,8 +87,15 @@ source install/gazebo_demo/setup.bash
 ```
 
 测试速度话题为 `/scan_demo/cmd_vel`，不使用真实 `/cmd_vel`。需要先从同一份 PCD 转换碰撞场景、指定与地图对齐的出生位置和三维路径；完整命令见 [运行说明](RUNNING.md)。
+演示默认使用 [CHAMP](https://github.com/chvmp/champ/tree/ros2) 的步态核心，
+由本项目适配当前 Go2 模型和 Gazebo 关节轨迹控制器；
+`gait_controller:=simple` 可切回原简化步态。
+需反复用实际 PCT Planner 规划参考路径时，可给演示启动命令添加
+`path_source:=pct`，并在 PCT 工作空间启动节点、调用 `/pct/plan`。
+demo 将 PCT 路径适配到其地图 frame 和高度后交给 SCAN，
+完整三终端命令见 [运行说明](RUNNING.md)。
 
-本机原始点云位于 [maps/pcd](src/scan_planner_demo/maps/pcd/README.md)，转换后的场景位于 [maps/gazebo](src/scan_planner_demo/maps/gazebo/README.md)。SCAN 直接读取并裁剪 PCD，不使用模拟激光雷达；Gazebo 从同一份 PCD 转出的静态网格处理碰撞。已用 `building2_9.pcd` 的连续地面区域及 `map.pcd` 平坦区域验证 Gazebo 站立、三维里程计、局部轨迹和非零速度发布。隔离测试中 Go2 能按正向指令前进和转向；SCAN 闭环仍有轨迹起始方向反复变化的问题，尚未验证目标到达或爬楼。
+本机原始点云位于 [maps/pcd](src/scan_planner_demo/maps/pcd/README.md)，转换后的场景位于 [maps/gazebo](src/scan_planner_demo/maps/gazebo/README.md)。SCAN 直接读取并裁剪 PCD，不使用模拟激光雷达；Gazebo 从同一份 PCD 转出的静态网格处理碰撞。`building2_9.pcd` 已完整转换为碰撞场景；使用 CHAMP 步态时 Go2 曾在完整场景中走完演示 PCT 路线，SCAN 报告任务完成并停车。速度滤波消除了复测中的瞬时超限停车，但另一次运行因局部轨迹碰撞和偏离参考走廊而停止，路线稳定性仍需改进；障碍绕行和爬楼也需分别验收。
 
 ```bash
 colcon test --base-paths src --build-base build/gazebo_demo \
@@ -100,8 +108,9 @@ colcon test-result --test-result-base build/gazebo_demo --verbose
 
 ## 报告与来源
 
-- [集成问题核查基线](report/README.md)
-- [重构实施与验证记录](report/refactor_progress.md)
+- [实验指令与结果记录](report/实验记录.md)
+- [集成问题核查基线](report/系统集成问题记录.md)
+- [重构实施与验证记录](report/重构实施与验证记录.md)
 - [原项目主页](https://wuyi2121.github.io/SCAN-Planner/)
 - [原始论文](https://arxiv.org/abs/2606.19555)
 

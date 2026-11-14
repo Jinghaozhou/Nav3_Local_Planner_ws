@@ -43,6 +43,13 @@ struct ControllerNode::Impl {
     odom_timeout=positive("odom_timeout",0.5);status_timeout=positive("status_timeout",0.3);
     parameters.kp_position=positive("controller.kp_position",0.8); parameters.kp_yaw=positive("controller.kp_yaw",1.5);
     parameters.lookahead=positive("controller.lookahead",0.8);parameters.max_vx=positive("controller.max_vx",0.75);
+    parameters.heading_preview_distance=node.declare_parameter<double>("controller.heading_preview_distance",0.0);
+    if(!std::isfinite(parameters.heading_preview_distance)||parameters.heading_preview_distance<0)
+      throw std::invalid_argument("controller.heading_preview_distance must be nonnegative");
+    parameters.preview_position_gain=node.declare_parameter<double>("controller.preview_position_gain",0.0);
+    if(!std::isfinite(parameters.preview_position_gain)||parameters.preview_position_gain<0 ||
+       parameters.preview_position_gain>parameters.kp_position)
+      throw std::invalid_argument("controller.preview_position_gain must be between zero and kp_position");
     parameters.max_vy=positive("controller.max_vy",0.35);parameters.max_yaw_rate=positive("controller.max_yaw_rate",1.0);
     parameters.heading_threshold=positive("controller.heading_threshold",0.8);
     control_frame=node.declare_parameter<std::string>("control_frame",input.robotFrame());

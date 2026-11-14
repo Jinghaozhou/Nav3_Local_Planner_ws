@@ -2,8 +2,10 @@
 
 ## 构建与环境
 
+工作空间目录改名后，旧 CMake 缓存需要清理；首次构建步骤见[运行说明](../../../RUNNING.md)。
+
 ```bash
-cd /home/jinghao/SCAN-Planner
+cd /home/jinghao/Nav3_Local_Planner_ws
 source /opt/ros/humble/setup.bash
 colcon build --base-paths src --packages-up-to scan_planner \
   --build-base build/merged --install-base install/merged \
@@ -53,8 +55,21 @@ ros2 launch scan_planner scan_planner.launch.py \
 若实际规划参考点与 IMU 原点不同，应先提供真实安装外参 TF，再设置 robot_frame；底盘速度对应另一参考点时设置 control_frame。不能靠改变 frame 名称修正安装误差。
 
 `velocity_source=pose_difference` 适配当前 Fast-LIO 未填写 twist 的实现。外部确认已经正确发布速度后才可选择 odometry_twist。姿态和速度变换包括参考点平移带来的角速度项。
+当 `velocity_source=odometry_twist` 且里程计速度含短周期机身摆动时，可设置
+`twist_velocity_filter_tau`（秒）对规划使用的三维速度做时间低通；默认
+`0.0` 表示直接使用原始 twist。该滤波同时作用于规划节点和控制节点的
+速度输入，不延迟位姿与 TF。应按里程计频率、步态周期和实际制动响应
+选择时间常数，持续超速仍应触发规划限制。
 
 算法参数位于 config/planner.yaml，控制参数位于 config/controller.yaml，公共适配位于 config/integration.yaml。通过 override_config 指定额外 ROS 参数 YAML；显式 launch 参数优先于配置文件。
+
+演示场景启用了 `planner.start_velocity_xy_deadband`、`planner.start_velocity_z_deadband`、
+`controller.heading_preview_distance` 和 `controller.preview_position_gain`：
+前两项在拟合轨迹起点及超限检查前抑制低速接触抖动，不改写原始里程计；
+控制器在固定时间预瞄距离太短时沿已验证轨迹寻找更稳定的方向，并用
+预瞄位置产生起步速度。通用配置将这些参数设为 0。移植到实机前，
+应按定位噪声、底盘响应、动态障碍与停车距离重新标定；空间预瞄可能
+使速度指令偏离轨迹的时间参数化，不能直接沿用演示数值。
 
 ## 外部模块约定
 

@@ -87,6 +87,8 @@ struct PlannerNode::Impl {
     parameters.reference_corridor=positive("planner.reference_corridor",0.8);
     parameters.max_velocity=positive("planner.max_velocity",0.75);
     parameters.max_acceleration=positive("planner.max_acceleration",0.5);
+    parameters.start_velocity_xy_deadband=node.declare_parameter<double>("planner.start_velocity_xy_deadband",0.0);
+    parameters.start_velocity_z_deadband=node.declare_parameter<double>("planner.start_velocity_z_deadband",0.0);
     parameters.goal_xy_tolerance=positive("goal.xy_tolerance",0.15);
     parameters.goal_z_tolerance=positive("goal.z_tolerance",0.15);
     parameters.stopped_velocity=positive("goal.stopped_velocity",0.1);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Turn a bounded part of a PCD snapshot into a static Gazebo collision world.
+"""Turn a whole PCD or a bounded region into a static Gazebo collision world.
 
 The output consists only of occupied voxels from the input PCD. Missing points
 stay empty; this tool does not invent a floor or silently fill gaps.
@@ -23,6 +23,15 @@ _FACES = [
 ]
 _CORNERS = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0),
             (0, 0, 1), (1, 0, 1), (1, 1, 1), (0, 1, 1)]
+
+
+def cell_size(resolution):
+    size = np.asarray(resolution, dtype=float)
+    if size.ndim == 0:
+        size = np.repeat(size, 3)
+    if size.shape != (3,) or not np.all(np.isfinite(size)) or np.any(size <= 0):
+        raise ValueError("Voxel resolution must contain three positive finite sizes")
+    return size
 
 
 def read_pcd_chunks(path, chunk_points=250000):
@@ -90,10 +99,9 @@ def read_pcd_chunks(path, chunk_points=250000):
 def occupied_voxels(path, bounds, resolution, max_voxels):
     lower = np.asarray(bounds[::2], dtype=float)
     upper = np.asarray(bounds[1::2], dtype=float)
+    resolution = cell_size(resolution)
     if not np.all(np.isfinite(lower)) or not np.all(np.isfinite(upper)) or not np.all(lower < upper):
         raise ValueError("Bounds must be finite min/max pairs")
-    if not np.isfinite(resolution) or resolution <= 0:
-        raise ValueError("Voxel resolution must be positive")
     cells = set()
     for xyz in read_pcd_chunks(path):
         selected = xyz[np.all((xyz >= lower) & (xyz < upper), axis=1)]
@@ -106,7 +114,29 @@ def occupied_voxels(path, bounds, resolution, max_voxels):
     return cells, lower
 
 
+def full_pcd_bounds(path, resolution):
+    """Return grid-aligned bounds that include every finite PCD point."""
+    resolution = cell_size(resolution)
+    minimum = np.full(3, np.inf)
+    maximum = np.full(3, -np.inf)
+    count = 0
+    for xyz in read_pcd_chunks(path):
+        if len(xyz):
+            minimum = np.minimum(minimum, xyz.min(axis=0))
+            maximum = np.maximum(maximum, xyz.max(axis=0))
+            count += len(xyz)
+    if not count:
+        raise ValueError("PCD contains no finite XYZ points")
+    lower = np.floor(minimum / resolution) * resolution
+    # occupied_voxels uses an exclusive upper bound. Add one grid cell so that
+    # even a point exactly on the maximum grid edge is included.
+    upper = (np.floor(maximum / resolution) + 1) * resolution
+    bounds = [float(value) for pair in zip(lower, upper) for value in pair]
+    return bounds, count
+
+
 def write_obj(path, cells, lower, resolution):
+    resolution = cell_size(resolution)
     vertex = 0
     with open(path, "w", encoding="ascii") as stream:
         stream.write("# Occupied PCD voxels; coordinates remain in the PCD frame\n")
@@ -149,14 +179,29 @@ def write_world(path, mesh):
     model = ET.SubElement(world, "model", name="pcd_environment")
     ET.SubElement(model, "static").text = "true"
     link = ET.SubElement(model, "link", name="geometry")
-    for element in ("collision", "visual"):
-        geometry = ET.SubElement(ET.SubElement(link, element, name=element), "geometry")
+    for element, name in (("collision", "collision"), ("visual", "visual"),
+                          ("visual", "voxel_edges")):
+        shape = ET.SubElement(link, element, name=name)
+        if name == "voxel_edges":
+            ET.SubElement(shape, "pose").text = "0 0 0.001 0 0 0"
+            ET.SubElement(shape, "wireframe").text = "true"
+            ET.SubElement(shape, "transparency").text = "0.35"
+        geometry = ET.SubElement(shape, "geometry")
         ET.SubElement(ET.SubElement(geometry, "mesh"), "uri").text = mesh.resolve().as_uri()
+        if name != "collision":
+            material = ET.SubElement(shape, "material")
+            if name == "visual":
+                ET.SubElement(material, "ambient").text = "0.22 0.35 0.43 1"
+                ET.SubElement(material, "diffuse").text = "0.35 0.53 0.62 1"
+                ET.SubElement(material, "specular").text = "0.02 0.02 0.02 1"
+            else:
+                ET.SubElement(material, "ambient").text = "0.06 0.10 0.13 1"
+                ET.SubElement(material, "diffuse").text = "0.08 0.15 0.18 1"
     ET.indent(sdf)
     ET.ElementTree(sdf).write(path, encoding="unicode", xml_declaration=True)
 
 
-def write_manifest(path, pcd, mesh, bounds, resolution, count):
+def write_manifest(path, pcd, mesh, bounds, resolution, count, coverage="bounded", finite_points=None):
     source = pcd.resolve()
     source_stat = source.stat()
     mesh_stat = mesh.stat()
@@ -164,8 +209,13 @@ def write_manifest(path, pcd, mesh, bounds, resolution, count):
         "pcd_file": str(source), "pcd_size": source_stat.st_size,
         "pcd_mtime_ns": source_stat.st_mtime_ns,
         "mesh_file": str(mesh.resolve()), "mesh_size": mesh_stat.st_size,
-        "bounds": bounds, "resolution": resolution, "occupied_voxels": count,
+        "bounds": bounds,
+        "resolution": float(resolution) if np.asarray(resolution).ndim == 0 else cell_size(resolution).tolist(),
+        "occupied_voxels": count,
+        "coverage": coverage,
     }
+    if finite_points is not None:
+        metadata["finite_points"] = finite_points
     path.with_suffix(".json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
@@ -173,19 +223,33 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pcd", type=Path)
     parser.add_argument("--output", type=Path, required=True, help="Output SDF file; OBJ is written beside it")
-    parser.add_argument("--bounds", type=float, nargs=6, metavar=("XMIN", "XMAX", "YMIN", "YMAX", "ZMIN", "ZMAX"), required=True)
+    extent = parser.add_mutually_exclusive_group(required=True)
+    extent.add_argument("--bounds", type=float, nargs=6,
+                        metavar=("XMIN", "XMAX", "YMIN", "YMAX", "ZMIN", "ZMAX"))
+    extent.add_argument("--all", action="store_true", help="Include every finite XYZ point in the PCD")
     parser.add_argument("--resolution", type=float, default=0.12)
+    parser.add_argument("--resolution-xyz", type=float, nargs=3,
+                        metavar=("X", "Y", "Z"),
+                        help="Per-axis voxel sizes; overrides --resolution")
     parser.add_argument("--max-voxels", type=int, default=80000)
     args = parser.parse_args()
     if args.max_voxels <= 0 or not args.pcd.is_file():
         parser.error("PCD must exist and max-voxels must be positive")
+    resolution = args.resolution_xyz if args.resolution_xyz is not None else args.resolution
+    try:
+        cell_size(resolution)
+    except ValueError as error:
+        parser.error(str(error))
+    bounds, finite_points = full_pcd_bounds(args.pcd, resolution) if args.all else (args.bounds, None)
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    cells, lower = occupied_voxels(args.pcd, args.bounds, args.resolution, args.max_voxels)
+    cells, lower = occupied_voxels(args.pcd, bounds, resolution, args.max_voxels)
     mesh = args.output.with_suffix(".obj")
-    write_obj(mesh, cells, lower, args.resolution)
+    write_obj(mesh, cells, lower, resolution)
     write_world(args.output, mesh)
-    write_manifest(args.output, args.pcd, mesh, args.bounds, args.resolution, len(cells))
-    print(f"Wrote {args.output}, {mesh} and metadata from {len(cells)} occupied voxels")
+    write_manifest(args.output, args.pcd, mesh, bounds, resolution, len(cells),
+                   coverage="all_finite_points" if args.all else "bounded", finite_points=finite_points)
+    print(f"Wrote {args.output}, {mesh} and metadata from {len(cells)} occupied voxels"
+          + (f" covering all {finite_points} finite points" if args.all else ""))
 
 
 if __name__ == "__main__":

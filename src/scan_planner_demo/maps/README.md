@@ -1,6 +1,6 @@
 # 本机演示地图
 
-- [pcd/](pcd/README.md)：原始 PCD 点云，供 SCAN 裁剪局部地图。
+- [pcd/](pcd/README.md)：原始 PCD 与独立的高度压缩副本，供 SCAN 裁剪局部地图。
 - [gazebo/](gazebo/README.md)：从同一份 PCD 指定区域转换的 SDF 场景、OBJ
   碰撞网格与 JSON 来源校验信息。
 

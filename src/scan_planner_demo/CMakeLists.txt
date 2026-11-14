@@ -12,6 +12,7 @@ find_package(std_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
+find_package(urdf REQUIRED)
 find_package(PCL REQUIRED COMPONENTS common io filters kdtree)
 find_package(pcl_conversions REQUIRED)
 
@@ -22,16 +23,25 @@ ament_target_dependencies(pcd_local_map_node rclcpp nav_msgs sensor_msgs pcl_con
 
 add_executable(go2_cmd_vel_gait src/go2_cmd_vel_gait.cpp)
 ament_target_dependencies(go2_cmd_vel_gait rclcpp geometry_msgs trajectory_msgs)
+add_executable(go2_champ_gait src/go2_champ_gait.cpp)
+target_include_directories(go2_champ_gait PRIVATE
+  third_party/champ/include third_party/champ/include/champ)
+ament_target_dependencies(go2_champ_gait rclcpp geometry_msgs trajectory_msgs urdf)
 
-install(TARGETS pcd_local_map_node go2_cmd_vel_gait DESTINATION lib/${PROJECT_NAME})
+install(TARGETS pcd_local_map_node go2_cmd_vel_gait go2_champ_gait DESTINATION lib/${PROJECT_NAME})
 install(DIRECTORY launch config rviz description DESTINATION share/${PROJECT_NAME})
+install(FILES third_party/champ/include/champ/LICENSE third_party/champ/README.md
+  DESTINATION share/${PROJECT_NAME}/third_party/champ)
 install(PROGRAMS scripts/keypoint_recorder.py scripts/publish_test_path.py
-  scripts/path_publisher.py scripts/pcd_to_sdf.py DESTINATION lib/${PROJECT_NAME})
+  scripts/path_publisher.py scripts/pct_path_adapter.py scripts/pcd_to_sdf.py
+  scripts/scale_pcd_z.py
+  DESTINATION lib/${PROJECT_NAME})
 if(BUILD_TESTING)
   find_package(Python3 COMPONENTS Interpreter REQUIRED)
   find_package(launch_testing_ament_cmake REQUIRED)
   add_test(NAME pcd_to_sdf
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test/test_pcd_to_sdf.py)
   add_launch_test(test/test_pcd_local_map.py TIMEOUT 35)
+  add_launch_test(test/test_pct_path_adapter.py TIMEOUT 35)
 endif()
 ament_package()

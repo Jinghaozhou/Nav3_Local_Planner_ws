@@ -19,5 +19,6 @@ private:
   std::string planning_frame_, global_frame_, robot_frame_, velocity_source_;
   double tf_age_;
   VelocityEstimator estimator_;
+  TwistVelocityFilter twist_filter_;
 };
 }  // namespace scan_planner

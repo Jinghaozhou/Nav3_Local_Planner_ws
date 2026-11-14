@@ -11,6 +11,8 @@
     planner.reference_corridor: 0.8
     planner.max_velocity: 0.75
     planner.max_acceleration: 0.5
+    planner.start_velocity_xy_deadband: 0.0
+    planner.start_velocity_z_deadband: 0.0
     optimization.smoothness: 1.0
     optimization.collision: 2.0
     optimization.feasibility: 0.1
