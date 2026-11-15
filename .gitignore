@@ -53,3 +53,5 @@ Thumbs.db
 *.so.*
 *.dylib
 *.dll
+# Local experiment and integration reports
+/report/

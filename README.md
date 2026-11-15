@@ -24,7 +24,7 @@ src/
     ├── src/             # PCD 裁剪、Go2 测试步态适配
     └── third_party/champ/ # BSD-3-Clause CHAMP 步态核心
 legacy/                  # 旧规划器、平面演示和原 simulator；COLCON_IGNORE
-report/                  # 集成问题及实施验证记录
+report/                  # 本地实验与联调记录，不纳入 Git
 ```
 
 `scan_planner` 内的纯 C++ 库 `scan_planner_core` 保留投影 A*、B-spline 和 L-BFGS 主要算法实现，不依赖 ROS 通信库；节点通过该库调用算法。窗口地图按完整快照更新，避免把多帧历史点当成当前帧射线；局部参考按三维路径进度裁剪，不再把整段 z 强制替换为起终点线性高度。
@@ -108,9 +108,8 @@ colcon test-result --test-result-base build/gazebo_demo --verbose
 
 ## 报告与来源
 
-- [实验指令与结果记录](report/实验记录.md)
-- [集成问题核查基线](report/系统集成问题记录.md)
-- [重构实施与验证记录](report/重构实施与验证记录.md)
+本地实验、集成问题和实施验证记录保存在 `report/`；该目录不纳入 Git，
+新克隆的仓库不包含这些记录。
 - [原项目主页](https://wuyi2121.github.io/SCAN-Planner/)
 - [原始论文](https://arxiv.org/abs/2606.19555)
 

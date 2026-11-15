@@ -196,8 +196,8 @@ ros2 launch scan_planner_demo simulation.launch.py \
   spawn_x:=3.0 spawn_y:=1.0 spawn_z:=0.40 rviz:=true
 ```
 
-此处保留 5 cm 偏移作为对照；复现后续 10 cm 偏移的完整命令与结果，
-请使用[实验记录 E07](report/实验记录.md#e07--scan-参考路径抬高-10-cm-的跨楼层联调)。
+此处保留 5 cm 偏移作为对照；后续 10 cm 偏移的实验命令与结果
+仅保存在本地 `report/`，仓库不包含该记录。
 
 缩高地图使用专用的 `scan_demo_z075.yaml`，将 SCAN 占据栅格分辨率
 设为 `0.05 m`，同时把输入局部点云降采样设为 `0.05 m`。原始地图示例
@@ -232,13 +232,12 @@ ros2 service call /pct/plan pct_planner_interfaces/srv/Plan "{
 `0.05 m` 栅格联调又在约 `(5.67, 0.01, 0.37) m` 遇到同样的
 碰撞拒绝。上面加 `path_z_offset:=0.05` 的无界面复现继续行进到约
 `(6.08,-0.14,0.37) m`，但仍因碰撞拒绝停车。后续 10 cm 偏移
-复现见[实验记录 E07](report/实验记录.md#e07--scan-参考路径抬高-10-cm-的跨楼层联调)。
+复现记录仅保存在本地 `report/`。
 `spawn_z:=0.40` 和
 `pct_path_z_offset:=-0.23` 是由新场景低层地面碰撞顶面约 `0.05 m`、
 旧模型机身离地约 `0.32 m` 以及 PCT 路径起点 `0.60 m` 推算的
 试验值，需要用新场景里程计与路径高度检查。PCT 会为新文件生成
-独立 Tomogram 缓存。完整实验命令与结果字段见
-[实验记录 E06](report/实验记录.md#e06--缩高点云的跨楼层-pct--scan--go2-联调)。
+独立 Tomogram 缓存。完整实验命令与结果字段仅保存在本地 `report/`。
 
 默认 `gait_controller:=champ` 使用 CHAMP 步态核心及
 [`config/gait_champ.yaml`](src/scan_planner_demo/config/gait_champ.yaml)，
@@ -379,7 +378,8 @@ colcon test --base-paths src --build-base build/merged \
 colcon test-result --test-result-base build/merged --verbose
 ```
 
-ROS 模拟测试只使用 `/scan_it` 命名空间，不使用真实底盘话题。实际执行过的验证及剩余限制记录在 [实施报告](report/重构实施与验证记录.md)。
+ROS 模拟测试只使用 `/scan_it` 命名空间，不使用真实底盘话题。
+实际执行过的验证及剩余限制记录在本地 `report/`，仓库不包含该目录。
 
 测试包的 PCD→SDF 与局部点云 ROS 测试不依赖 Gazebo；在当前沙箱运行时
 把 ROS 日志写入工作空间：
