@@ -32,14 +32,16 @@ ros2 launch scan_planner scan_planner.launch.py
 
 默认话题已对应当前 Fast-LIO 与 PCT 的真实接口。需要外部 TF 链 map→odom→base_link。Fast-LIO 必须使用组合启动配置，原始 launch 的 camera_init/body 及 /Odometry 并非本配置默认接口。
 
-默认 unknown_space_policy=occupied：仅有点云不能证明未命中体素可行，节点保持零速度并报告局部规划失败。在已确认窗口覆盖、全局路线可通行性并接受“边界内未命中为空闲”的障碍图假设后，显式选择：
+默认 `unknown_space_policy=free_inside_bounds`：在局部快照边界内将未被点云标为占据的体素视为自由，已观测障碍和边界仍阻止规划。点云本身不能证明未命中体素可行，使用前应确认窗口覆盖、全局路线可通行性。需要保守地将未观测空间视为占据时选择：
 
 ```bash
 ros2 launch scan_planner scan_planner.launch.py \
-  unknown_space_policy:=free_inside_bounds
+  unknown_space_policy:=occupied
 ```
 
-该选项并未增加地面支撑、悬崖或未知空间观测能力。核心目前为窗口障碍图，未提供带观测掩码的三态自由空间地图。
+自由空间策略并未增加地面支撑、悬崖或未知空间观测能力。核心目前为窗口障碍图，未提供带观测掩码的三态自由空间地图。
+
+`check_local_collision` 默认为 `true`。在已确认实验区域通畅、只验证 PCT 路径跟踪的实验中，可设为 `false`：SCAN 仍要求新鲜局部地图，但规划和轨迹复核不使用局部点云障碍；地图窗口边界、参考走廊、速度和加速度约束仍保留。此模式不证明路径无障碍，实验结束后恢复默认值。
 
 更改输入、frame、路径高度或安装参考点：
 

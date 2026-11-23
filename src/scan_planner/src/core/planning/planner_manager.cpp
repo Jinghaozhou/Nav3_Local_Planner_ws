@@ -5,8 +5,8 @@
 
 namespace scan_planner {
 PlannerManager::PlannerManager(const MapParameters &map, const PlannerParameters &p,
-                               const OptimizationParameters &optimization)
-  : map_(std::make_shared<GridMap>(map)), parameters_(p) {
+                               const OptimizationParameters &optimization, bool check_local_collision)
+  : map_(std::make_shared<GridMap>(map)), parameters_(p), check_local_collision_(check_local_collision) {
   if (!(p.horizon > 0 && p.point_spacing > 0 && p.max_velocity > 0 && p.max_acceleration > 0 &&
         p.reference_corridor > 0) || !std::isfinite(p.horizon + p.point_spacing +
         p.max_velocity + p.max_acceleration + p.reference_corridor +
@@ -53,7 +53,8 @@ PlanResult PlannerManager::plan(const RobotState &state, const Path &reference, 
   if (reference.empty() || cloud.empty() || !state.position.allFinite() || !state.velocity.allFinite()) {
     result.reason = "Missing valid robot state, reference path or local map"; return result;
   }
-  map_->updateSnapshot(cloud, state.position);
+  // In the explicit PCT-path experiment, keep map bounds but omit local obstacle points.
+  map_->updateSnapshot(check_local_collision_ ? cloud : Path{}, state.position);
   if (distanceToPath(state.position, reference) > parameters_.reference_corridor) {
     result.reason = "Robot is outside the reference corridor"; return result;
   }

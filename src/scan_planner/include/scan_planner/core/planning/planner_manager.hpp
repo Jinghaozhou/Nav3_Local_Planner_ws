@@ -9,7 +9,7 @@ bool collisionFree(const Trajectory &trajectory, const GridMap &map,
 class PlannerManager {
 public:
   PlannerManager(const MapParameters &map, const PlannerParameters &planner,
-                 const OptimizationParameters &optimization);
+                 const OptimizationParameters &optimization, bool check_local_collision = true);
   PlanResult plan(const RobotState &state, const Path &local_reference, const Path &cloud);
   bool collisionFree(const Trajectory &trajectory, double from = 0.0) const;
   bool reached(const RobotState &state, const Eigen::Vector3d &goal) const;
@@ -17,6 +17,7 @@ public:
 private:
   GridMap::Ptr map_;
   PlannerParameters parameters_;
+  bool check_local_collision_;
   BsplineOptimizer optimizer_;
 };
 }  // namespace scan_planner

@@ -21,6 +21,8 @@ def _setup(context):
         "path_height_mode": value("path_height_mode"),
         "path_z_offset": float(value("path_z_offset")),
         "unknown_space_policy": value("unknown_space_policy"),
+        "check_local_collision": boolean("check_local_collision"),
+        "map_timeout": float(value("map_timeout")),
         "require_localization_permission": boolean("require_localization_permission"),
     }
     nodes = []
@@ -52,7 +54,9 @@ def generate_launch_description():
         "global_frame": "map", "planning_frame": "odom", "robot_frame": "base_link",
         "control_frame": "base_link", "velocity_source": "pose_difference",
         "path_height_mode": "reference", "path_z_offset": "0.0",
-        "unknown_space_policy": "occupied", "require_localization_permission": "false",
+        "unknown_space_policy": "free_inside_bounds", "require_localization_permission": "false",
+        "check_local_collision": "true",
+        "map_timeout": "1.5",
         "localization_permission_topic": "/scan_planner/localization_permission",
     }
     return LaunchDescription([DeclareLaunchArgument(key, default_value=value)

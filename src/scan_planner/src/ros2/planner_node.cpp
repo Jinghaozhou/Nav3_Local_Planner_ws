@@ -27,7 +27,7 @@ struct PlannerNode::Impl {
   ReferencePath reference;
   builtin_interfaces::msg::Time odom_stamp,cloud_stamp;
   bool have_odom{false},have_cloud{false},have_path{false},permission{false};
-  bool permission_required{false};
+  bool permission_required{false},check_local_collision{true};
   bool task_completed{false};
   std::optional<Steady::time_point> odom_received,cloud_received,permission_received;
   double odom_timeout,map_timeout,tf_timeout,lease,replan_period,translation_jump,rotation_jump;
@@ -79,9 +79,10 @@ struct PlannerNode::Impl {
     map.radius=positive("robot.radius",0.25);
     map.cylinder_offset=node.declare_parameter<double>("robot.cylinder_offset",0.18);
     map.body_above=positive("robot.body_above",0.1); map.body_below=positive("robot.body_below",0.4);
-    const auto unknown=node.declare_parameter<std::string>("unknown_space_policy","occupied");
+    const auto unknown=node.declare_parameter<std::string>("unknown_space_policy","free_inside_bounds");
     if(unknown!="occupied"&&unknown!="free_inside_bounds") throw std::invalid_argument("Invalid unknown_space_policy");
-    map.allow_unobserved_space=unknown=="free_inside_bounds";
+    check_local_collision=node.declare_parameter<bool>("check_local_collision",true);
+    map.allow_unobserved_space=unknown=="free_inside_bounds" || !check_local_collision;
     parameters.horizon=positive("planner.horizon",3.0);
     parameters.point_spacing=positive("planner.point_spacing",0.15);
     parameters.reference_corridor=positive("planner.reference_corridor",0.8);
@@ -98,7 +99,7 @@ struct PlannerNode::Impl {
     optimization.collision=positive("optimization.collision",2.0);
     optimization.feasibility=positive("optimization.feasibility",0.1);
     optimization.clearance=positive("optimization.clearance",0.2);
-    planner=std::make_unique<PlannerManager>(map,parameters,optimization);
+    planner=std::make_unique<PlannerManager>(map,parameters,optimization,check_local_collision);
     validation_map=std::make_shared<GridMap>(map);
     trajectory_pub=node.create_publisher<scan_planner_msgs::msg::Bspline>("scan_planner/trajectory",rclcpp::QoS(1).reliable());
     status_pub=node.create_publisher<Status>("scan_planner/status",rclcpp::QoS(1).reliable().transient_local());
@@ -115,8 +116,8 @@ struct PlannerNode::Impl {
     // Time-based instance token avoids accepting stale controller data after a restart.
     path_id=static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
     timer=node.create_wall_timer(std::chrono::milliseconds(50),[this]{tick();});
-    RCLCPP_INFO(node.get_logger(),"SCAN integration ready: local planning frame=%s, path height=%s, unknown=%s",
-      input.planningFrame().c_str(),height_mode.c_str(),unknown.c_str());
+    RCLCPP_INFO(node.get_logger(),"SCAN integration ready: local planning frame=%s, path height=%s, unknown=%s, local collision check=%s",
+      input.planningFrame().c_str(),height_mode.c_str(),unknown.c_str(),check_local_collision?"on":"off");
   }
   ~Impl() { if(future.valid()) future.wait(); }
   void stop(uint8_t next,const std::string &message) {
@@ -151,7 +152,7 @@ struct PlannerNode::Impl {
       cloud=std::move(converted); cloud_stamp=m.header.stamp; cloud_received=Steady::now(); have_cloud=true;
       if(have_odom) {
         // This map belongs to the callback thread, independent of the worker map.
-        validation_map->updateSnapshot(cloud,robot.position);
+        validation_map->updateSnapshot(check_local_collision ? cloud : Path{},robot.position);
         if(active_trajectory && !collisionFree(*active_trajectory,*validation_map,parameters.max_velocity)) {
           stop(Status::LOCAL_PLAN_FAILED,"Latest snapshot invalidates the active trajectory");
           publishStatus();
@@ -202,7 +203,7 @@ struct PlannerNode::Impl {
     }
     if(!result.success) {stop(Status::LOCAL_PLAN_FAILED,result.reason); return;}
     auto &trajectory=result.trajectory;
-    validation_map->updateSnapshot(cloud,robot.position);
+    validation_map->updateSnapshot(check_local_collision ? cloud : Path{},robot.position);
     if(!collisionFree(trajectory,*validation_map,parameters.max_velocity)) {
       stop(Status::LOCAL_PLAN_FAILED,"Latest snapshot rejects the completed trajectory"); return;
     }
@@ -239,7 +240,9 @@ struct PlannerNode::Impl {
       const auto zero=rclcpp::Time(0,0,node.get_clock()->get_clock_type());
       const auto map_to_odom=frames.lookup(input.globalFrame(),input.planningFrame(),zero,tf_timeout);
       // Explicitly consume the authoritative TF chain, including robot reference.
-      const auto global_robot=frames.lookup(input.globalFrame(),input.robotFrame(),rclcpp::Time(odom_stamp),tf_timeout);
+      // The odometry message may be slightly newer than localization's 10 Hz map->odom TF.
+      // Use the latest complete chain, then retain the age and pose-consistency checks below.
+      const auto global_robot=frames.lookup(input.globalFrame(),input.robotFrame(),zero,tf_timeout);
       if((global_robot.translation()-map_to_odom*robot.position).norm()>0.25)
         throw std::runtime_error("Odometry and TF robot poses disagree");
       const Eigen::Matrix3d rotation_error=global_robot.linear().transpose()*

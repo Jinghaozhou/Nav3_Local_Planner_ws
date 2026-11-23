@@ -19,9 +19,8 @@
     path_height_mode: reference
     path_z_offset: 0.0
     body_height: 0.4
-    # A point-only map has no observed-free mask. Motion is disabled with the
-    # conservative default. Select free_inside_bounds explicitly after verifying
-    # the upstream coverage and PCT traversability assumptions.
-    unknown_space_policy: occupied
+    # Point clouds mark occupied voxels only. Within the local snapshot bounds,
+    # treat unmarked voxels as free; observed obstacles and bounds still block motion.
+    unknown_space_policy: free_inside_bounds
     # Optional standard Bool from a localization quality adapter (1 Hz or faster).
     require_localization_permission: false

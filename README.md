@@ -64,11 +64,11 @@ source install/merged/setup.bash
 ros2 launch scan_planner scan_planner.launch.py
 ```
 
-默认 `unknown_space_policy=occupied`。点云快照只提供占据证据，默认不会把所有未出现的体素当成自由空间，因此缺少自由空间证据时保持零速度。若已确认局部覆盖和 PCT 可通行路线，并接受边界内未命中为空闲的障碍图假设，可显式使用：
+默认 `unknown_space_policy=free_inside_bounds`：局部快照边界内未被点云标为占据的体素按自由空间处理，已观测障碍和边界仍阻止规划。点云快照不提供自由空间射线证据，因此使用前应确认局部覆盖和 PCT 路线的可通行性。需要将未观测空间按占据处理时使用：
 
 ```bash
 ros2 launch scan_planner scan_planner.launch.py \
-  unknown_space_policy:=free_inside_bounds
+  unknown_space_policy:=occupied
 ```
 
 话题、namespace、frame、速度来源和路径高度可配置，详见 [集成说明](src/scan_planner/docs/integration.md) 和 [接口协议](src/scan_planner/docs/interfaces.md)。当前 PCT 已有高度偏移，默认保留输入 z，不再隐式增加 0.4 m。

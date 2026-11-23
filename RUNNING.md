@@ -29,7 +29,7 @@ ros2 launch scan_planner scan_planner.launch.py
 
 该命令只启动 SCAN 的规划与控制节点。需要外部 `/fast_lio/odom`、`/fast_lio/local_map`、`/pct/global_path` 和 `map → odom → base_link` TF。尚未接入完整数据时发布零速度与等待状态。
 
-默认未知空间按占据处理。确认地图覆盖、PCT 可通行性及机器人参考点后，若采用局部障碍图假设，显式加入 `unknown_space_policy:=free_inside_bounds`。真实机器人接入条件和参数覆盖方式见 [集成说明](src/scan_planner/docs/integration.md)。
+默认在局部地图边界内将未观测空间按自由处理；已观测障碍和边界仍阻止规划。使用前应确认地图覆盖、PCT 可通行性及机器人参考点。若需要将未观测空间按占据处理，加入 `unknown_space_policy:=occupied`。真实机器人接入条件和参数覆盖方式见 [集成说明](src/scan_planner/docs/integration.md)。
 
 ## PCD + Go2 + Gazebo 独立测试
 
