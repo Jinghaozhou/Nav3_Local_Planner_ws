@@ -29,7 +29,8 @@ bool PlannerManager::reached(const RobotState &state, const Eigen::Vector3d &goa
 bool PlannerManager::collisionFree(const Trajectory &trajectory, double from) const {
   return scan_planner::collisionFree(trajectory, *map_, parameters_.max_velocity, from);
 }
-bool collisionFree(const Trajectory &trajectory, const GridMap &map, double max_velocity, double from) {
+bool collisionFree(const Trajectory &trajectory, const GridMap &map, double max_velocity, double from,
+                   Eigen::Vector3d *first_collision, double *collision_time) {
   auto position = trajectory.position;
   if (!std::isfinite(trajectory.duration) || trajectory.duration <= 0) return false;
   const double dt = std::min(0.02, map.getResolution() / (4 * max_velocity));
@@ -44,7 +45,11 @@ bool collisionFree(const Trajectory &trajectory, const GridMap &map, double max_
       const Eigen::Vector3d previous = position.evaluateDeBoorT(std::max(0.0, sample - dt));
       delta = point - previous;
     }
-    if (!point.allFinite() || map.getInflateOccupancy(point, std::atan2(delta.y(), delta.x())) != 0) return false;
+    if (!point.allFinite() || map.getInflateOccupancy(point, std::atan2(delta.y(), delta.x())) != 0) {
+      if(first_collision) *first_collision=point;
+      if(collision_time) *collision_time=sample;
+      return false;
+    }
   }
   return true;
 }
@@ -121,7 +126,13 @@ PlanResult PlannerManager::plan(const RobotState &state, const Path &reference, 
       continue;
     }
     result.trajectory = {position, position.getTimeSum()};
-    if (!collisionFree(result.trajectory)) { result.reason = "Final whole trajectory is in collision"; return result; }
+    Eigen::Vector3d collision_point=Eigen::Vector3d::Zero(); double collision_time=-1.0;
+    if (!scan_planner::collisionFree(result.trajectory,*map_,parameters_.max_velocity,0.0,
+                                   &collision_point,&collision_time)) {
+      result.reason = "Final whole trajectory is in collision at t="+std::to_string(collision_time)+
+        " xyz=("+std::to_string(collision_point.x())+","+std::to_string(collision_point.y())+","+
+        std::to_string(collision_point.z())+") in planning frame"; return result;
+    }
     for (double t=0; t<result.trajectory.duration; t+=0.05) {
       const Eigen::Vector3d sample = position.evaluateDeBoorT(t);
       if (distanceToPath(sample, seed) > parameters_.reference_corridor) {

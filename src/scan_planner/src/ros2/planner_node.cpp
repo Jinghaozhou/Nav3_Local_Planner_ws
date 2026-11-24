@@ -7,6 +7,7 @@
 #include <scan_planner_msgs/msg/bspline.hpp>
 #include <scan_planner_msgs/msg/planner_status.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <algorithm>
 #include <chrono>
 #include <future>
 #include <optional>
@@ -21,6 +22,7 @@ struct PlannerNode::Impl {
   std::unique_ptr<PlannerManager> planner;
   GridMap::Ptr validation_map;
   std::optional<Trajectory> active_trajectory;
+  std::optional<rclcpp::Time> active_trajectory_start;
   PlannerParameters parameters;
   RobotState robot;
   Path cloud;
@@ -29,6 +31,9 @@ struct PlannerNode::Impl {
   bool have_odom{false},have_cloud{false},have_path{false},permission{false};
   bool permission_required{false},check_local_collision{true};
   bool task_completed{false};
+  bool task_heartbeat_required{false},task_active{false};
+  double task_heartbeat_timeout{1.0};
+  std::optional<Steady::time_point> task_heartbeat_received;
   std::optional<Steady::time_point> odom_received,cloud_received,permission_received;
   double odom_timeout,map_timeout,tf_timeout,lease,replan_period,translation_jump,rotation_jump;
   double path_offset,body_height;
@@ -48,6 +53,7 @@ struct PlannerNode::Impl {
   rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr cloud_sub;
   rclcpp::Subscription<nav_msgs::msg::Path>::SharedPtr path_sub;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr permission_sub;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr task_heartbeat_sub;
   rclcpp::Publisher<scan_planner_msgs::msg::Bspline>::SharedPtr trajectory_pub;
   rclcpp::Publisher<Status>::SharedPtr status_pub;
   rclcpp::Publisher<nav_msgs::msg::Path>::SharedPtr local_path_pub;
@@ -106,13 +112,23 @@ struct PlannerNode::Impl {
     local_path_pub=node.create_publisher<nav_msgs::msg::Path>("scan_planner/local_path",rclcpp::QoS(1).reliable().transient_local());
     odom_sub=node.create_subscription<nav_msgs::msg::Odometry>("odom",rclcpp::SensorDataQoS(),
       [this](nav_msgs::msg::Odometry::ConstSharedPtr m){onOdometry(*m);});
-    cloud_sub=node.create_subscription<sensor_msgs::msg::PointCloud2>("local_map",rclcpp::SensorDataQoS(),
+    const auto cloud_reliability=node.declare_parameter<std::string>("local_map_reliability","best_effort");
+    if(cloud_reliability!="reliable" && cloud_reliability!="best_effort")
+      throw std::invalid_argument("Invalid local_map_reliability");
+    auto cloud_qos=rclcpp::SensorDataQoS();
+    if(cloud_reliability=="reliable") cloud_qos.reliable();
+    cloud_sub=node.create_subscription<sensor_msgs::msg::PointCloud2>("local_map",cloud_qos,
       [this](sensor_msgs::msg::PointCloud2::ConstSharedPtr m){onCloud(*m);});
     path_sub=node.create_subscription<nav_msgs::msg::Path>("global_path",rclcpp::QoS(1).reliable().transient_local(),
       [this](nav_msgs::msg::Path::ConstSharedPtr m){onPath(*m);});
     permission_required=node.declare_parameter<bool>("require_localization_permission",false);
     if(permission_required) permission_sub=node.create_subscription<std_msgs::msg::Bool>("localization_permission",rclcpp::QoS(1).reliable(),
       [this](std_msgs::msg::Bool::ConstSharedPtr m){permission=m->data; permission_received=Steady::now();});
+    task_heartbeat_required=node.declare_parameter<bool>("require_task_heartbeat",false);
+    task_heartbeat_timeout=positive("task_heartbeat_timeout",1.0);
+    const auto heartbeat_topic=node.declare_parameter<std::string>("task_heartbeat_topic","/nav3/task_heartbeat");
+    if(task_heartbeat_required) task_heartbeat_sub=node.create_subscription<std_msgs::msg::Bool>(heartbeat_topic,rclcpp::QoS(1).reliable(),
+      [this](std_msgs::msg::Bool::ConstSharedPtr m){task_active=m->data; task_heartbeat_received=Steady::now();});
     // Time-based instance token avoids accepting stale controller data after a restart.
     path_id=static_cast<uint64_t>(std::chrono::system_clock::now().time_since_epoch().count());
     timer=node.create_wall_timer(std::chrono::milliseconds(50),[this]{tick();});
@@ -123,6 +139,7 @@ struct PlannerNode::Impl {
   void stop(uint8_t next,const std::string &message) {
     const bool changed=state!=next || reason!=message;
     state=next; reason=message; valid_until.reset(); active_trajectory.reset();
+    active_trajectory_start.reset();
     if(changed) {
       nav_msgs::msg::Path empty; empty.header.frame_id=input.planningFrame(); empty.header.stamp=node.now();
       local_path_pub->publish(empty);
@@ -153,9 +170,16 @@ struct PlannerNode::Impl {
       if(have_odom) {
         // This map belongs to the callback thread, independent of the worker map.
         validation_map->updateSnapshot(check_local_collision ? cloud : Path{},robot.position);
-        if(active_trajectory && !collisionFree(*active_trajectory,*validation_map,parameters.max_velocity)) {
-          stop(Status::LOCAL_PLAN_FAILED,"Latest snapshot invalidates the active trajectory");
-          publishStatus();
+        if(active_trajectory) {
+          const double elapsed=active_trajectory_start ?
+            std::clamp((node.now()-*active_trajectory_start).seconds(),0.0,active_trajectory->duration) : 0.0;
+          Eigen::Vector3d point=Eigen::Vector3d::Zero();double at=-1;
+          if(!collisionFree(*active_trajectory,*validation_map,parameters.max_velocity,elapsed,&point,&at)) {
+            stop(Status::LOCAL_PLAN_FAILED,"Latest snapshot invalidates remaining trajectory at t="+
+              std::to_string(at)+" xyz=("+std::to_string(point.x())+","+std::to_string(point.y())+","+
+              std::to_string(point.z())+") in planning frame");
+            publishStatus();
+          }
         }
       }
     } catch(const std::exception &e) {have_cloud=false; stop(Status::DATA_STALE,e.what()); publishStatus();}
@@ -181,6 +205,12 @@ struct PlannerNode::Impl {
   }
   bool inputsReady() {
     const auto now=node.now(); const auto wall=Steady::now();
+    if(have_path && task_heartbeat_required && (!task_active || !task_heartbeat_received ||
+        std::chrono::duration<double>(wall-*task_heartbeat_received).count()>task_heartbeat_timeout)) {
+      ++path_id; have_path=false;
+      stop(Status::GLOBAL_PATH_INVALID,"Task manager heartbeat is absent, inactive or expired; path revoked");
+      return false;
+    }
     if(!have_odom || !have_cloud) {
       if(state!=Status::DATA_STALE && state!=Status::GLOBAL_PATH_INVALID)
         stop(Status::WAITING_INPUT,"Waiting for valid odometry and local map");
@@ -208,9 +238,10 @@ struct PlannerNode::Impl {
       stop(Status::LOCAL_PLAN_FAILED,"Latest snapshot rejects the completed trajectory"); return;
     }
     active_trajectory=trajectory;
+    active_trajectory_start=node.now();
     scan_planner_msgs::msg::Bspline message;
     message.header.frame_id=input.planningFrame(); message.header.stamp=node.now();
-    message.path_id=path_id; message.traj_id=++trajectory_id; message.order=3; message.start_time=node.now();
+    message.path_id=path_id; message.traj_id=++trajectory_id; message.order=3; message.start_time=*active_trajectory_start;
     valid_until=node.now()+rclcpp::Duration::from_seconds(std::min(lease,trajectory.duration));
     message.valid_until=*valid_until;
     const auto points=trajectory.position.getControlPoint();

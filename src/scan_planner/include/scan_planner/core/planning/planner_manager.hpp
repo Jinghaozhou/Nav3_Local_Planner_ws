@@ -5,7 +5,8 @@
 
 namespace scan_planner {
 bool collisionFree(const Trajectory &trajectory, const GridMap &map,
-                   double max_velocity, double from = 0.0);
+                   double max_velocity, double from = 0.0,
+                   Eigen::Vector3d *first_collision = nullptr, double *collision_time = nullptr);
 class PlannerManager {
 public:
   PlannerManager(const MapParameters &map, const PlannerParameters &planner,

@@ -30,6 +30,17 @@ TEST(SnapshotMap, InflationAccountsForPositionsInsideVoxels) {
   GridMap map(p);map.updateSnapshot({Eigen::Vector3d(0.099,0.099,0.6)},Eigen::Vector3d::Zero());
   EXPECT_EQ(map.getInflateOccupancy({0.301,0.201,0.6},0),1);
 }
+TEST(SnapshotMap, FinerCellsReduceDiscretizationWithoutShrinkingEnvelope) {
+  MapParameters p; p.radius=0.25;p.cylinder_offset=0;p.allow_unobserved_space=true;
+  p.resolution=0.1;
+  GridMap coarse(p);coarse.updateSnapshot({Eigen::Vector3d(0.36,0,0.01)},Eigen::Vector3d::Zero());
+  EXPECT_EQ(coarse.getInflateOccupancy(Eigen::Vector3d::Zero(),0),1);
+  p.resolution=0.05;
+  GridMap fine(p);fine.updateSnapshot({Eigen::Vector3d(0.36,0,0.01)},Eigen::Vector3d::Zero());
+  EXPECT_EQ(fine.getInflateOccupancy(Eigen::Vector3d::Zero(),0),0);
+  fine.updateSnapshot({Eigen::Vector3d(0.2,0,0.01)},Eigen::Vector3d::Zero());
+  EXPECT_EQ(fine.getInflateOccupancy(Eigen::Vector3d::Zero(),0),1);
+}
 TEST(ReferencePath, PreservesFloorAndBoundsForwardProgress) {
   ReferencePath path;
   path.set({{0,0,0},{2,0,0},{2,0,2},{0,0,2}});
@@ -61,6 +72,15 @@ TEST(Planner, FlatPathAndWholeTrajectoryCollisionValidation) {
   EXPECT_NEAR(position.evaluateDeBoorT(result.trajectory.duration).x(),2,0.01);
   planner.map()->updateSnapshot({Eigen::Vector3d(1.9,0,0.6)},state.position);
   EXPECT_FALSE(planner.collisionFree(result.trajectory));
+  Eigen::Vector3d first=Eigen::Vector3d::Constant(NAN);double collision_time=-1;
+  EXPECT_FALSE(collisionFree(result.trajectory,*planner.map(),parameters.max_velocity,0,&first,&collision_time));
+  EXPECT_TRUE(first.allFinite());
+  EXPECT_GE(collision_time,0);
+  EXPECT_LE(collision_time,result.trajectory.duration);
+  planner.map()->updateSnapshot({Eigen::Vector3d(0,0,0.6)},state.position);
+  EXPECT_FALSE(collisionFree(result.trajectory,*planner.map(),parameters.max_velocity));
+  EXPECT_TRUE(collisionFree(result.trajectory,*planner.map(),parameters.max_velocity,
+                            result.trajectory.duration*0.8));
   EXPECT_FALSE(planner.reached(state,{0,0,2}));
   state.velocity={0.3,0,0}; EXPECT_FALSE(planner.reached(state,state.position));
 }

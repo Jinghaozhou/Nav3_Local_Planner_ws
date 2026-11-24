@@ -14,6 +14,7 @@ from nav_msgs.msg import Odometry, Path
 from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import PointCloud2, PointField
 from tf2_ros import TransformBroadcaster, StaticTransformBroadcaster
+from std_msgs.msg import Bool
 from scan_planner_msgs.msg import PlannerStatus
 
 
@@ -24,6 +25,8 @@ def generate_test_description():
         "robot_frame": "scan_it_reference", "control_frame": "scan_it_reference",
         "unknown_space_policy": "free_inside_bounds", "velocity_source": "pose_difference",
         "odom_timeout": 0.4, "map_timeout": 0.7,
+        "require_task_heartbeat": True, "task_heartbeat_topic": "/scan_it/task_heartbeat",
+        "task_heartbeat_timeout": 0.4,
     }
     planner = launch_ros.actions.Node(
         package="scan_planner", executable="planner_node", namespace="scan_it",
@@ -59,6 +62,7 @@ class TestNavigationContracts(unittest.TestCase):
             static_broadcaster.sendTransform(installation)
             odom_pub = node.create_publisher(Odometry, "/scan_it/odom", 10)
             cloud_pub = node.create_publisher(PointCloud2, "/scan_it/local_map", 10)
+            heartbeat_pub = node.create_publisher(Bool, "/scan_it/task_heartbeat", 10)
             qos = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
                              durability=DurabilityPolicy.TRANSIENT_LOCAL)
             path_pub = node.create_publisher(Path, "/scan_it/global_path", qos)
@@ -71,7 +75,8 @@ class TestNavigationContracts(unittest.TestCase):
                                      lambda msg: local_paths.append(msg), qos)
             position = [0.0, 0.0, 0.6]
             settings = {"odom": True, "cloud": True, "frozen_stamp": None,
-                        "map_shift": 0.0, "blocked": False, "wrong_tf_orientation": False}
+                        "map_shift": 0.0, "blocked": False, "wrong_tf_orientation": False,
+                        "heartbeat": True}
 
             def to_map(x, y, z):
                 return (1.0 + math.cos(0.4)*x - math.sin(0.4)*y,
@@ -90,6 +95,8 @@ class TestNavigationContracts(unittest.TestCase):
                 path_pub.publish(msg)
 
             def feed():
+                if settings["heartbeat"]:
+                    heartbeat_pub.publish(Bool(data=True))
                 stamp = node.get_clock().now().to_msg()
                 transform = TransformStamped(); transform.header.stamp = stamp
                 transform.header.frame_id = "scan_it_map"; transform.child_frame_id = "scan_it_odom"
@@ -150,6 +157,14 @@ class TestNavigationContracts(unittest.TestCase):
             self.assertEqual(valid[-1].header.frame_id, "scan_it_odom")
             self.assertAlmostEqual(valid[-1].poses[0].pose.position.x, 0.1, delta=0.03)
             self.assertAlmostEqual(valid[-1].poses[0].pose.position.z, 0.6, delta=0.03)
+
+            # A vanished manager revokes the path. Renewing its heartbeat alone
+            # must never resume the previous task without a new path.
+            settings["heartbeat"] = False
+            wait_for(lambda: any("heartbeat" in s.reason for s in statuses[-20:]) and stopped(), timeout=3.0)
+            settings["heartbeat"] = True
+            pump(0.5); self.assertTrue(stopped())
+            publish_path(); wait_for(moving)
 
             # A new occupied snapshot invalidates an already active trajectory.
             settings["blocked"] = True

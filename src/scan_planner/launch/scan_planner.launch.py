@@ -23,6 +23,10 @@ def _setup(context):
         "unknown_space_policy": value("unknown_space_policy"),
         "check_local_collision": boolean("check_local_collision"),
         "map_timeout": float(value("map_timeout")),
+        "local_map_reliability": value("local_map_reliability"),
+        "require_task_heartbeat": boolean("require_task_heartbeat"),
+        "task_heartbeat_topic": value("task_heartbeat_topic"),
+        "task_heartbeat_timeout": float(value("task_heartbeat_timeout")),
         "require_localization_permission": boolean("require_localization_permission"),
     }
     nodes = []
@@ -57,6 +61,9 @@ def generate_launch_description():
         "unknown_space_policy": "free_inside_bounds", "require_localization_permission": "false",
         "check_local_collision": "true",
         "map_timeout": "1.5",
+        "local_map_reliability": "best_effort",
+        "require_task_heartbeat": "false", "task_heartbeat_topic": "/nav3/task_heartbeat",
+        "task_heartbeat_timeout": "1.0",
         "localization_permission_topic": "/scan_planner/localization_permission",
     }
     return LaunchDescription([DeclareLaunchArgument(key, default_value=value)
